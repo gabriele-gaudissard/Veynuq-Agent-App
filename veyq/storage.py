@@ -22,6 +22,7 @@ DEFAULTS = {
     "image_provider": "disabled", "image_url": "http://127.0.0.1:7860", "image_model": "",
     "context_tokens": 16384, "response_tokens": 4096,
     "collapsed_projects": [],
+    "disabled_tools": [],
 }
 
 
@@ -164,6 +165,7 @@ class Store:
         self.data.setdefault("projects", [])
         self.data.setdefault("memory", "")
         self.data.setdefault("automations", [])
+        self.data.setdefault("plugins", [])
         for job in self.data['automations']:
             if job.get('last_state') == 'running':
                 job.update(last_state='interrupted', enabled=False)

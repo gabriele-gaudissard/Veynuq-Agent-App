@@ -883,6 +883,27 @@ async function showTools() {
     description.className = "sub";
     description.textContent = ui(group.description);
     item.append(title, description);
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = ui('Enable or disable individual tools');
+    details.append(summary);
+    for (const tool of group.tools || []) {
+      const label = document.createElement('label');
+      label.className = 'tool-toggle';
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox'; toggle.checked = tool.enabled;
+      toggle.setAttribute('aria-label', tool.name);
+      const text = document.createElement('span'); text.textContent = tool.name;
+      label.append(toggle, text);
+      toggle.addEventListener('change', async () => {
+        toggle.disabled = true;
+        try { await call('set_tool_enabled', tool.name, toggle.checked); }
+        catch(e) { toggle.checked = !toggle.checked; toast(String(e.message || e)); }
+        finally { toggle.disabled = false; }
+      });
+      details.append(label);
+    }
+    if ((group.tools || []).length) item.append(details);
     host.append(item);
   }
   open("toolsModal");
@@ -890,6 +911,43 @@ async function showTools() {
 }
 action("toolsButton", showTools);
 action("closeTools", () => close("toolsModal"));
+action('enableAllTools', async () => { await call('enable_all_tools'); await showTools(); });
+async function showPlugins() {
+  const result = await call('get_plugins');
+  const host = $('pluginList'); host.replaceChildren();
+  if (!result.plugins.length) {
+    const empty = document.createElement('p'); empty.textContent = ui('No external plugins installed. Built-in tools are already available.'); host.append(empty);
+  }
+  for (const plugin of result.plugins) {
+    const row = document.createElement('section'); row.className = 'tool-category';
+    const heading = document.createElement('h3'); heading.textContent = plugin.name + (plugin.version ? ' · '+plugin.version : '');
+    const description = document.createElement('p'); description.textContent = plugin.description;
+    const enabled = document.createElement('label'); enabled.className='tool-toggle';
+    const check = document.createElement('input'); check.type='checkbox'; check.checked=plugin.enabled;
+    const enabledText = document.createElement('span'); enabledText.textContent=ui('Enabled'); enabled.append(check,enabledText);
+    check.addEventListener('change', async () => {
+      check.disabled=true;
+      try { await call('set_plugin_enabled',plugin.id,check.checked); }
+      catch(e) { check.checked=!check.checked;toast(String(e.message || e)); }
+      finally { check.disabled=false; }
+    });
+    const detail = document.createElement('details'); const summary = document.createElement('summary');summary.textContent=ui('Components and connection');
+    const preview=document.createElement('pre'); preview.textContent=JSON.stringify({skills:Object.keys(plugin.skills),servers:plugin.servers,unsupported:plugin.unsupported},null,2); detail.append(summary,preview);
+    const credentials=document.createElement('details');const credentialSummary=document.createElement('summary');credentialSummary.textContent=ui('Optional service token');
+    const token=document.createElement('input'); token.type='password';token.autocomplete='off';token.placeholder=ui(plugin.has_token?'Saved in vault; leave blank to keep it':'Only if the service requires authentication'); token.setAttribute('aria-label',ui('Optional service token'));
+    const save=document.createElement('button'); save.textContent=ui('Save token'); save.addEventListener('click',async()=>{try{await call('save_plugin_token',plugin.id,token.value);token.value='';await showPlugins();}catch(e){toast(String(e.message||e));}});
+    const clear=document.createElement('button'); clear.textContent=ui('Remove token');clear.addEventListener('click',async()=>{if(confirm(ui('Remove the saved service token?'))){try{await call('save_plugin_token',plugin.id,'',true);await showPlugins();}catch(e){toast(String(e.message||e));}}});
+    credentials.append(credentialSummary,token,save,clear);
+    const remove=document.createElement('button');remove.textContent=ui('Uninstall plugin');remove.addEventListener('click',async()=>{if(confirm(ui('Uninstall this plugin and remove its saved token?'))){try{await call('remove_plugin',plugin.id);await showPlugins();}catch(e){toast(String(e.message||e));}}});
+    row.append(heading,description,enabled,detail,credentials,remove);host.append(row);
+  }
+  open('pluginsModal');
+}
+const pluginConfirmation = 'Install this plugin? Its MCP servers can execute local code or contact external services when used. Review its configuration and trust its source.';
+action('pluginsButton',showPlugins);
+action('closePlugins',()=>close('pluginsModal'));
+action('importPlugin',async()=>{if(confirm(ui(pluginConfirmation))){await call('install_plugin_folder',true);await showPlugins();}});
+action('installMcp',async()=>{if(confirm(ui(pluginConfirmation))){await call('install_mcp_config',$('mcpPluginName').value.trim(),$('mcpPluginConfig').value,true);$('mcpPluginConfig').value='';await showPlugins();}});
 async function saveSettings() {
   await call("save_settings", {
     lang: $("language").value,

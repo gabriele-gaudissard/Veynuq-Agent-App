@@ -44,7 +44,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.3.0"
+        s["version"] = "4.4.0"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -59,8 +59,87 @@ class DesktopAPI:
             ('GitHub', 'Read and update repositories, issues, pull requests, branches and releases.', {'github'}),
             ('Images and documents', 'Inspect image files, generate PNGs with a configured image engine and read PDF/DOCX documents. Create documents, spreadsheets and charts with project code.', {'view_image','read_document','generate_image'}),
             ('Memory and task control', 'Maintain local memory, plan work, ask essential questions and use context from related project chats.', {'save_memory','update_plan','ask_user','read_project_context','checkpoint_task','load_procedure','delegate_tasks'}),
+            ('Plugins', 'Load installed skills and connect to reviewed MCP tools when needed.', {'plugin_catalog','plugin_tools','plugin_call'}),
         ]
-        return {'total': len(names), 'groups': [{'name': title,'description': description,'count': len(tools & names)} for title, description, tools in groups]}
+        disabled=set(self._store.snapshot()['settings'].get('disabled_tools', []))
+        return {'total': len(names), 'enabled':len(names-disabled), 'groups': [{'name': title,'description': description,'count': len(tools & names),
+            'tools':[{'name':tool['function']['name'],'description':tool['function']['description'],'enabled':tool['function']['name'] not in disabled}
+                     for tool in TOOLS if tool['function']['name'] in tools]} for title, description, tools in groups]}
+
+    def set_tool_enabled(self, name, enabled):
+        from .tools import SPECS
+        if name not in SPECS or type(enabled) is not bool: raise ValueError('Invalid tool toggle.')
+        with self._agent.lock:
+            self._idle()
+            with self._store.lock:
+                disabled=set(self._store.data['settings'].get('disabled_tools',[]))
+                if enabled: disabled.discard(name)
+                else: disabled.add(name)
+                self._store.data['settings']['disabled_tools']=sorted(disabled)
+                self._store.save()
+        return {'ok':True}
+
+    def enable_all_tools(self):
+        with self._agent.lock:
+            self._idle()
+            with self._store.lock:
+                self._store.data['settings']['disabled_tools']=[]
+                self._store.save()
+        return {'ok':True}
+
+    def get_plugins(self):
+        from .plugins import Plugins
+        manager=Plugins(self._store)
+        return {'plugins':[{**row,'has_token':bool(self._store.vault.get('plugin:'+row['id']))} for row in manager.catalog()]}
+
+    def install_plugin_folder(self, confirmed=False):
+        with self._agent.lock:
+            self._idle()
+            if confirmed is not True: raise ValueError('Review and confirm external plugin installation.')
+            if not self._window: raise RuntimeError('Plugin folder selection requires a visible window.')
+            import webview
+            selected=self._window.create_file_dialog(webview.FOLDER_DIALOG)
+            if not selected: return {'cancelled':True}
+            from .plugins import Plugins
+            return Plugins(self._store).install(selected[0])
+
+    def install_mcp_config(self, name, configuration, confirmed=False):
+        with self._agent.lock:
+            self._idle()
+            if confirmed is not True: raise ValueError('Review and confirm external plugin installation.')
+            if not isinstance(configuration,str) or len(configuration)>40000: raise ValueError('MCP configuration too large.')
+            import tempfile
+            from .plugins import Plugins,IDENTIFIER
+            if not isinstance(name,str) or not IDENTIFIER.fullmatch(name): raise ValueError('Use a short plugin name with letters, numbers or hyphens.')
+            parsed=json.loads(configuration)
+            with tempfile.TemporaryDirectory(prefix='veynuq-plugin-') as folder:
+                root=Path(folder)
+                (root/'plugin.json').write_text(json.dumps({'name':name}),encoding='utf-8')
+                (root/'.mcp.json').write_text(json.dumps(parsed),encoding='utf-8')
+                return Plugins(self._store).install(root)
+
+    def set_plugin_enabled(self, plugin_id, enabled):
+        with self._agent.lock:
+            self._idle()
+            from .plugins import Plugins
+            Plugins(self._store).set_enabled(plugin_id,enabled)
+        return {'ok':True}
+
+    def save_plugin_token(self, plugin_id, token, clear=False):
+        with self._agent.lock:
+            self._idle()
+            from .plugins import Plugins
+            Plugins(self._store).record(plugin_id,False)
+            if not isinstance(token,str) or len(token)>8000 or type(clear) is not bool: raise ValueError('Invalid plugin credential.')
+            if clear or token: self._store.vault.set('plugin:'+plugin_id,'' if clear else token)
+        return {'ok':True}
+
+    def remove_plugin(self, plugin_id):
+        with self._agent.lock:
+            self._idle()
+            from .plugins import Plugins
+            Plugins(self._store).remove(plugin_id)
+        return {'ok':True}
 
     def save_settings(self, values):
         with self._agent.lock:
@@ -751,7 +830,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.3.0", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.4.0", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates

@@ -11,3 +11,5 @@ faster-whisper>=1.2.1,<2
 # PyAV 19 removed metadata_errors used by the current speech decoder.
 av>=11,<19
 sounddevice>=0.5.3,<0.6
+mcp>=1.30,<2
+jsonschema>=4.25,<5

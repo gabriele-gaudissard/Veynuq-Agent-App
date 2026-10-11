@@ -37,6 +37,7 @@ audit.jsonl
 # Local builds and runtime
 .venv/
 .veyq-runtime/
+.veyq-python/
 venv/
 env/
 release/
@@ -61,6 +62,7 @@ coverage/
 /backups/
 /sandboxes/
 /proposals/
+/plugins/
 /voice-models/
 /windows-sandboxes/
 background-task.json

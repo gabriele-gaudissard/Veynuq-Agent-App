@@ -14,6 +14,25 @@ class Verification:
         entry = {'kind': kind, 'target': target}
         if entry not in self.pending: self.pending.append(entry)
 
+    def observations(self, enabled):
+        """Bounded read-only recovery for known targets; normal tool gates apply."""
+        proposed = []
+        for entry in self.pending:
+            kind, target = entry['kind'], entry['target']
+            if kind == 'file': name, args = 'read_file', {'path': target, 'start_line': 1, 'end_line': 200}
+            elif kind in {'directory', 'missing'}:
+                name, args = 'list_dir', {'path': target if kind == 'directory' else str(Path(target).parent)}
+            elif kind == 'project':
+                cwd = self.runner.cwd
+                name, args = 'list_dir', {'path': str(cwd if cwd.is_relative_to(self.runner.workspace) else self.runner.workspace)}
+            elif kind == 'window': name, args = 'computer_inspect', {'window_id': target}
+            elif kind == 'desktop': name, args = 'computer_windows', {}
+            else: continue  # Remote mutations require the model to select the verification endpoint.
+            pair = (name, args)
+            if name in enabled and pair not in proposed: proposed.append(pair)
+            if len(proposed) == 3: break
+        return proposed
+
     def observe(self, name, args, result):
         if not result.get('ok'): return
         value = result.get('result', {})

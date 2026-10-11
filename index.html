@@ -48,7 +48,7 @@
           ><button id="memory">◇ Local memory</button
           ><button id="toolsButton">⌘ Tools</button
           ><button id="settingsButton">⚙ Settings</button>
-          <div class="sub">Desktop agent · v4.3<br />No telemetry</div>
+          <div class="sub">Desktop agent · v4.4<br />No telemetry</div>
         </div>
       </aside>
       <main>
@@ -214,7 +214,24 @@
           private services; vision requires a compatible model.
         </p>
         <div id="toolCatalog"></div>
-        <div class="buttons"><button id="closeTools">Close</button></div>
+        <p class="sub">All built-in tools are included and enabled by default. Turning a tool off removes it from the agent and blocks its execution. Permissions and external requirements still apply.</p>
+        <div class="buttons"><button id="pluginsButton">Plugins</button><button id="enableAllTools">Enable all tools</button><button id="closeTools">Close</button></div>
+      </section>
+    </div>
+    <div aria-modal="true" class="modal" id="pluginsModal" role="dialog">
+      <section class="dialog">
+        <h2>Plugins</h2>
+        <p class="intro">Add skills, commands and MCP tools. Compatible components of Claude Code plugins can be imported from a folder.</p>
+        <p class="sub">External code runs with your Windows permissions when used. Install only plugins you trust. Hooks, LSP and automatic account sign-in are not supported. Accounts are requested only when a service needs them.</p>
+        <div class="buttons"><button id="importPlugin">Import plugin folder</button></div>
+        <details><summary>Add an MCP server</summary>
+          <label class="field">Plugin name<input id="mcpPluginName" placeholder="my-tools" maxlength="80"></label>
+          <label class="field">MCP configuration<textarea id="mcpPluginConfig" rows="7" spellcheck="false" placeholder='{"mcpServers":{"service":{"type":"http","url":"https://example.com/mcp"}}}'></textarea></label>
+          <p class="sub">Use ${VEYNUQ_PLUGIN_TOKEN} for credentials. Save the token separately after installation; never paste secrets into the configuration.</p>
+          <button id="installMcp">Install MCP configuration</button>
+        </details>
+        <div id="pluginList"></div>
+        <div class="buttons"><button id="closePlugins">Close</button></div>
       </section>
     </div>
     <div aria-modal="true" class="modal" id="settingsModal" role="dialog">

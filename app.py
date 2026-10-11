@@ -33,7 +33,7 @@ def startup_log():
 def ensure_dependencies(stream):
     import importlib.util
     import subprocess
-    required = ["webview", "requests", "bs4", "cryptography", "pypdf", "PIL", "playwright", "faster_whisper", "sounddevice"]
+    required = ["webview", "requests", "bs4", "cryptography", "pypdf", "PIL", "playwright", "faster_whisper", "sounddevice", "mcp", "jsonschema"]
     if os.name == "nt":
         required.append("pywinauto")
     if any(importlib.util.find_spec(name) is None for name in required):

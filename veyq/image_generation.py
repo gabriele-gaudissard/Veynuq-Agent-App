@@ -102,7 +102,7 @@ if __name__=='__main__':
     try:
         line=sys.stdin.readline(50000)
         print(json.dumps(worker(json.loads(line))),flush=True)
-    except Exception:
+    except Exception as error:
         # Provider errors can echo credentials, URLs and prompts: never log them.
-        print(json.dumps({'ok':False,'error':'Image generation failed. Check the image engine, model and vault token in Settings.'}),flush=True)
+        print(json.dumps({'ok':False,'error':'Image generation failed (' + type(error).__name__ + '). Check the image engine, model and vault token in Settings.'}),flush=True)
         sys.exit(1)

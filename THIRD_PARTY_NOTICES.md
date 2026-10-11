@@ -25,6 +25,8 @@ Additional runtime components:
 | pywinauto | Windows accessibility and input controller | BSD-3-Clause |
 | pypdf | PDF text extraction | BSD-3-Clause |
 | Pillow | Window screenshot encoding | HPND |
+| MCP Python SDK | Plugin tool transports | MIT |
+| jsonschema | External tool argument validation | MIT |
 | Playwright | Isolated Edge browser control | Apache-2.0 |
 | faster-whisper | Local speech transcription | MIT |
 | Whisper model by OpenAI, converted by Systran | Separately downloaded multilingual speech weights | MIT |

@@ -934,3 +934,7 @@ summary:focus-visible {
 .clipboard-copy { position: fixed; left: -10000px; top: 0; }
 .autonomy-settings .check { align-items: flex-start; }
 .autonomy-settings .check small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+ .tool-toggle { display:flex; align-items:center; gap:10px; padding:8px 0; overflow-wrap:anywhere; }
+ .tool-toggle input { width:18px; height:18px; flex:none; }
+ #pluginList pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:280px; overflow:auto; }
+ #pluginsModal details { margin:16px 0; }

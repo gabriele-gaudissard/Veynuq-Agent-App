@@ -17,7 +17,7 @@ from .storage import atomic_json
 from .signing import verify_manifest
 
 UPDATE_REPO = "gabriele-gaudissard/Veynuq-Agent-App"
-ROOT_FILES = {"app.py", "index.html", "app.js", "app.css", "i18n.js", "ui-translations.json", "Veyq.bat", "Veynuq.bat", "Launcher.ps1", "install.ps1",
+ROOT_FILES = {"app.py", "index.html", "app.js", "app.css", "i18n.js", "ui-translations.json", "Veyq.bat", "Veynuq.bat", "Launcher.ps1", "install.ps1", "PythonSetup.ps1",
               "Installer.bat", "Installer_only_shortcut.bat", "requirements.txt", "README.md",
               "LICENSE", "THIRD_PARTY_NOTICES.md", "build.json"}
 ASSET_FILES = {"assets/brand/mark-dark.svg", "assets/brand/mark-light.svg", "assets/brand/logo-dark.svg",
