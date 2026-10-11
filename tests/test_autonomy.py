@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import socket
 import tempfile
 import threading
 import time
@@ -210,8 +211,22 @@ class Autonomy(unittest.TestCase):
         payload=post.call_args.kwargs['json'];self.assertEqual(payload['options']['num_ctx'],8192);self.assertEqual(payload['options']['num_predict'],4096);self.assertIn('tools',payload)
 
     def test_mutation_without_inspection_is_not_marked_completed(self):
+        self.store.data['settings']['disabled_tools'] = ['read_file']
         self.agent_run([call('write_file',path='proof.txt',content='actual')]+[{'role':'assistant','content':'Done'}]*3)
         self.assertEqual(self.agent.state,'unverified');self.assertIn('final verification',self.session['history'][-1]['content']);self.assertEqual((self.workspace/'proof.txt').read_text(),'actual')
+
+    def test_ignored_verification_request_recovers_with_actual_read(self):
+        self.agent_run([call('write_file',path='proof.txt',content='actual')]+[{'role':'assistant','content':'Done'}]*3)
+        self.assertEqual(self.agent.state,'completed')
+        reads=[json.loads(m['content']) for m in self.session['history'] if m.get('name')=='read_file']
+        self.assertEqual(len(reads),1);self.assertTrue(reads[0]['ok']);self.assertIn('actual',str(reads[0]))
+        self.assertEqual(self.session['task']['verification'],[])
+
+    def test_failed_recovery_preserves_unverified_state(self):
+        with patch.object(ToolRunner,'tool_read_file',side_effect=RuntimeError('Unavailable target')):
+            self.agent_run([call('write_file',path='proof.txt',content='actual')]+[{'role':'assistant','content':'Done'}]*3)
+        self.assertEqual(self.agent.state,'unverified')
+        self.assertTrue(self.session['task']['verification'])
 
     def test_mutation_with_actual_read_is_completed(self):
         self.agent_run([call('write_file',path='proof.txt',content='actual'),call('read_file',path='proof.txt'),{'role':'assistant','content':'Verified'}])
@@ -269,12 +284,18 @@ class Autonomy(unittest.TestCase):
     def test_real_image_worker_uses_controlled_local_http_service(self):
         pixels=png();received=[]
         class Handler(BaseHTTPRequestHandler):
+            protocol_version='HTTP/1.1'
             def do_POST(server):
                 received.append((server.path,json.loads(server.rfile.read(int(server.headers['Content-Length'])))))
                 body=json.dumps({'images':[base64.b64encode(pixels).decode()]}).encode()
                 server.send_response(200);server.send_header('Content-Length',str(len(body)));server.end_headers();server.wfile.write(body)
             def log_message(*args):pass
-        server=ThreadingHTTPServer(('127.0.0.1',0),Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        class ExclusiveServer(ThreadingHTTPServer):
+            allow_reuse_address=False
+            def server_bind(server):
+                if os.name=='nt': server.socket.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
+                super().server_bind()
+        server=ExclusiveServer(('127.0.0.1',0),Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
             settings={**self.store.data['settings'],'image_provider':'local_sd','image_url':f'http://127.0.0.1:{server.server_port}'}
             result,width,height=generate(settings,'','Controlled fixture',256,256,self.cancel)

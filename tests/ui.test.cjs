@@ -9,6 +9,7 @@ const dom = new JSDOM(fs.readFileSync(path.join(root,"index.html"),"utf8"),{url:
 const w=dom.window,document=w.document;
 const dispose=w.close.bind(w);
 const calls=[];
+const disabledTools=new Set();
 let eventState={events:[],busy:false,state:"idle"};
 let voiceState={state:'idle',ready:true};
 const chatRows=[{id:"demo",title:"New activity",untitled:true,project_id:""},{id:"other",title:"Second chat",project_id:""}];
@@ -16,6 +17,12 @@ const settings={desktop_scope:"all",background_schedules:false,image_provider:"d
 w.matchMedia=()=>({matches:true});w.confirm=()=>true;w.prompt=()=>"Renamed";
 Object.defineProperty(w.navigator,"clipboard",{value:{writeText:async text=>calls.push(["clipboard",text])}});
 const api={
+ get_plugins:async()=>({plugins:[{id:'plugin-one',name:'<img src=x onerror=alert(1)>',description:'<script>unsafe</script>',enabled:true,version:'1',skills:{review:'commands/review.md'},servers:{local:{command:'python',args:['server.py']}},unsupported:['hooks'],has_token:false}]}),
+ set_plugin_enabled:async(...args)=>calls.push(['pluginEnabled',...args]),
+ save_plugin_token:async(...args)=>calls.push(['pluginToken',...args]),
+ install_mcp_config:async(...args)=>calls.push(['installMcp',...args]),
+ set_tool_enabled:async(name,enabled)=>{calls.push(['toolEnabled',name,enabled]);if(enabled)disabledTools.delete(name);else disabledTools.add(name);},
+ enable_all_tools:async()=>disabledTools.clear(),
  set_project_group_open:async(id,opened)=>calls.push(['groupState',id,opened]),
  prepare_windows_sandbox:async id=>{calls.push(['prepareSandbox',id]);return {configuration:'C:\\Demo\\Veynuq.wsb'};},
  preview_generated_image:async(id,artifact)=>{calls.push(['previewArtifact',id,artifact]);return {path:'C:\\Demo\\proof.png',data_url:'data:image/png;base64,iVBORw0KGgo='};},
@@ -25,7 +32,7 @@ const api={
  review_changes:async()=>({diff:'-old\n+<img src=x onerror=alert(1)>\n'}),
  resume_task:async id=>calls.push(['resume',id]),save_automation:async(...args)=>calls.push(['schedule',...args]),
  toggle_automation:async id=>calls.push(['toggleSchedule',id]),remove_automation:async id=>calls.push(['removeSchedule',id]),
- get_tool_catalog:async()=>({total:30,groups:[{name:'Mouse and keyboard',description:'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.',count:5}]}),
+ get_tool_catalog:async()=>({total:44,groups:[{name:'Mouse and keyboard',description:'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.',count:1,tools:[{name:'computer_action',enabled:!disabledTools.has('computer_action')}]}]}),
  delete_session:async id=>{calls.push(["delete",id]);const i=chatRows.findIndex(s=>s.id===id);if(i>=0)chatRows.splice(i,1);},
  create_session:async()=>{calls.push(["create"]);const id="created";chatRows.push({id,title:"New activity",untitled:true,project_id:""});return id;},
  get_settings:async()=>({...settings}),get_sessions:async()=>chatRows,get_projects:async()=>[{id:"project-one",name:"Project one"}],
@@ -112,6 +119,14 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,30));
  for(const lang of ["it","es","fr"]){w.VeyqI18N.setLanguage(lang);await tick();assert.notEqual(document.getElementById("providerToken").placeholder,"Token (optional for the local engine)");}
  w.VeyqI18N.setLanguage("en");await tick();
  await w.showTools();assert.match(document.getElementById('toolCatalog').textContent,/Mouse and keyboard/);w.close('toolsModal');
+ const toolToggle=document.querySelector('#toolCatalog input');assert.equal(toolToggle.checked,true);toolToggle.checked=false;toolToggle.dispatchEvent(new w.Event('change'));await tick();
+ assert.deepEqual(calls.find(c=>c[0]==='toolEnabled'),['toolEnabled','computer_action',false]);await w.showTools();assert.equal(document.querySelector('#toolCatalog input').checked,false);
+ document.getElementById('enableAllTools').click();await tick();assert.equal(document.querySelector('#toolCatalog input').checked,true);w.close('toolsModal');
+ await w.showPlugins();await tick();assert.equal(document.querySelectorAll('#pluginList img,#pluginList script').length,0);assert.match(document.querySelector('#pluginList').textContent,/<img/);
+ const pluginToggle=document.querySelector('#pluginList input[type=checkbox]');pluginToggle.checked=false;pluginToggle.dispatchEvent(new w.Event('change'));await tick();assert.deepEqual(calls.find(c=>c[0]==='pluginEnabled'),['pluginEnabled','plugin-one',false]);
+ const pluginToken=document.querySelector('#pluginList input[type=password]');assert.equal(pluginToken.value,'');pluginToken.value='synthetic-test-token';[...document.querySelectorAll('#pluginList button')].find(b=>b.textContent==='Save token').click();await tick();assert.equal(document.querySelector('#pluginList input[type=password]').value,'');
+ for(const lang of ['it','es','fr']) { w.VeyqI18N.setLanguage(lang);await tick();assert.notEqual(document.getElementById('importPlugin').textContent,'Import plugin folder');assert.notEqual(document.getElementById('installMcp').textContent,'Install MCP configuration'); }
+ w.VeyqI18N.setLanguage('en');w.close('pluginsModal');await tick();
  w.VeyqI18N.setLanguage('it');await tick();await w.showTools();assert.match(document.getElementById('toolCatalog').textContent,/Mouse e tastiera/);assert.doesNotMatch(document.getElementById('toolCatalog').textContent,/Inspect Windows/);w.close('toolsModal');w.VeyqI18N.setLanguage('en');await tick();
  assert.equal(document.getElementById("providerToken").placeholder,"Token (optional for the local engine)");
  settings.has_provider_token=true;settings.has_github_token=true;await w.showSettings();await tick();
