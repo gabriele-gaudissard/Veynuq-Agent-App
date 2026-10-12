@@ -58,7 +58,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.5.1"
+        s["version"] = "4.5.2"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -981,6 +981,17 @@ def main():
 
 def foreground_main(data_dir):
     store = Store(root=data_dir, legacy=ROOT / "codex_data.json")
+    if '--prepare-images' in sys.argv:
+        from .image_setup import prepare_for_install
+        last_progress = {}
+        def progress(state):
+            percent = int(state['downloaded'] * 100 / state['total'])
+            bucket = percent // 5
+            if last_progress.get(state['file']) != bucket:
+                last_progress[state['file']] = bucket
+                print(f"Image engine: {state['file']} {percent}%", flush=True)
+        print(json.dumps(prepare_for_install(store, progress=progress)), flush=True)
+        return
     if store.data['settings'].get('background_schedules') and os.name=='nt' and '--self-check' not in sys.argv:
         try:
             marker=store.root/'background-task.json'
@@ -993,7 +1004,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.5.1", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.5.2", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates

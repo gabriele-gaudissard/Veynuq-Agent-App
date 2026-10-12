@@ -26,7 +26,8 @@ def startup_log():
     if sys.stdout is None:
         sys.stdout = stream
     faulthandler.enable(file=stream)
-    faulthandler.dump_traceback_later(30, file=stream)
+    if not any(flag in sys.argv for flag in ('--install','--prepare-images','--self-check','--background')):
+        faulthandler.dump_traceback_later(30, file=stream)
     return stream, path
 
 
@@ -44,6 +45,7 @@ def ensure_dependencies(stream):
             raise RuntimeError("Dependency installation failed. Run Installer.bat; details are in startup.log.")
 
 if __name__ == '__main__':
+    gui_launch = sys.stdout is None
     diagnostic_stream, diagnostic_path = startup_log()
     try:
         # A scheduled read-only worker must never install software in the background.
@@ -53,7 +55,7 @@ if __name__ == '__main__':
     except Exception as error:
         faulthandler.cancel_dump_traceback_later()
         logging.exception("Veynuq startup failed")
-        if os.name == 'nt':
+        if os.name == 'nt' and gui_launch and '--background' not in sys.argv:
             import ctypes
             ctypes.windll.user32.MessageBoxW(0, str(error) + "\n\nDiagnostica: " + str(diagnostic_path), 'Veynuq - Avvio non riuscito', 0x10)
         else:

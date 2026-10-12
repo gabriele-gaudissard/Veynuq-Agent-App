@@ -155,3 +155,22 @@ def prepare(data_root, cancel, progress=lambda state: None):
             (root/name).write_bytes(response.content)
     verify(data_root)
     return {'ready':True, 'model':'Stable Diffusion 1.5', 'download_bytes':MODEL_SIZE+ENGINE_SIZE, 'account_required':False}
+
+
+def prepare_for_install(store, progress=lambda state: None):
+    """Prepare the default engine; preserve an existing explicit provider choice."""
+    if store.snapshot()['settings']['image_provider'] != 'managed':
+        return {'skipped':True, 'reason':'Existing image provider selection preserved.'}
+    # A complete verified installation is reusable even without network access.
+    if ready(store.root):
+        try:
+            verify(store.root)
+            root = root_for(store.root)
+            notices = [root/name for name in ('MODEL-CARD.md','MODEL-LICENSE.txt','ENGINE-LICENSE.txt')]
+            if all(p.is_file() and not p.is_symlink() and 0 < p.stat().st_size <= 100_000 for p in notices):
+                return {'ready':True, 'reused':True, 'model':'Stable Diffusion 1.5', 'account_required':False}
+        except (OSError, ValueError):
+            pass  # Repair a missing or changed download through pinned preparation.
+    import threading
+    result = prepare(store.root, threading.Event(), progress)
+    return {**result, 'reused':False}

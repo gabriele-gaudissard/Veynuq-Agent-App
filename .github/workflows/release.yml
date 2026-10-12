@@ -25,10 +25,10 @@ jobs:
           node-version: "22"
       - name: Restore pinned verification tools from repository history
         # Development-only files stay out of the user's main tree and ZIP.
-        # This is the immutable baseline that passed the 213 backend checks and the UI suite.
+        # This is the immutable baseline that passed the 217 backend checks and the UI suite.
         run: |
-          git fetch --depth=1 origin 80e9efdb273153bca4e67b7bbe7595c41f2cdaaa
-          git restore --source=80e9efdb273153bca4e67b7bbe7595c41f2cdaaa --worktree -- tests package.json package-lock.json ui-translations.json
+          git fetch --depth=1 origin 9f6844bb6fb2e6403ca30a4680ec538f44a5e836
+          git restore --source=9f6844bb6fb2e6403ca30a4680ec538f44a5e836 --worktree -- tests package.json package-lock.json ui-translations.json
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q app.py veyq
@@ -45,8 +45,8 @@ jobs:
           python-version: "3.13"
       - name: Restore pinned controlled sandbox checks
         run: |
-          git fetch --depth=1 origin 80e9efdb273153bca4e67b7bbe7595c41f2cdaaa
-          git restore --source=80e9efdb273153bca4e67b7bbe7595c41f2cdaaa --worktree -- tests
+          git fetch --depth=1 origin 9f6844bb6fb2e6403ca30a4680ec538f44a5e836
+          git restore --source=9f6844bb6fb2e6403ca30a4680ec538f44a5e836 --worktree -- tests
       - run: python -m pip install -r requirements.txt
       - run: docker pull python:3.13-slim
       - run: python -m unittest discover -s tests -p test_advanced.py -v
@@ -63,8 +63,8 @@ jobs:
           python-version: "3.13"
       - name: Restore pinned fresh-install verification
         run: |
-          git fetch --depth=1 origin 80e9efdb273153bca4e67b7bbe7595c41f2cdaaa
-          git restore --source=80e9efdb273153bca4e67b7bbe7595c41f2cdaaa --worktree -- tests
+          git fetch --depth=1 origin 9f6844bb6fb2e6403ca30a4680ec538f44a5e836
+          git restore --source=9f6844bb6fb2e6403ca30a4680ec538f44a5e836 --worktree -- tests
       - run: python -m pip install 'cryptography>=46,<49'
       - run: python tests/fresh_install_check.py
 
@@ -93,5 +93,5 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release/veyq-update.zip release/veyq-update.json --clobber
           else
-            gh release create "$tag" release/veyq-update.zip release/veyq-update.json --target "$BUILD_SHA" --title "Veynuq 4.5.1 · ${BUILD_SHA:0:7}" --notes "Automatic build after passing Windows tests. Download veyq-update.zip, extract it and run Installer.bat. Existing managed installations update automatically." --latest
+            gh release create "$tag" release/veyq-update.zip release/veyq-update.json --target "$BUILD_SHA" --title "Veynuq 4.5.2 · ${BUILD_SHA:0:7}" --notes "Automatic build after passing Windows tests. Download veyq-update.zip, extract it and run Installer.bat. Existing managed installations update automatically." --latest
           fi

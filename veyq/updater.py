@@ -115,15 +115,24 @@ class Updater:
             return {"ready": False, "message": "Checkout di sviluppo. Gli aggiornamenti automatici sono attivi sulle installazioni da pacchetto, non sul sorgente Git."}
         if self.pending.exists():
             return {"ready": True, "message": "Aggiornamento gia' preparato."}
-        r = public_request(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest")
-        release = json.loads(r["text"])
-        assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
-        if not {"veyq-update.zip", "veyq-update.json"}.issubset(assets):
-            return {"ready": False, "message": "La release non contiene un pacchetto di aggiornamento."}
         prefix = f"https://github.com/{UPDATE_REPO}/releases/download/"
-        if any(not url.startswith(prefix) for url in assets.values()):
-            raise ValueError("Asset pubblicato fuori dal repository autorizzato.")
-        manifest = json.loads(public_request(assets["veyq-update.json"])["text"])
+        try:
+            r = public_request(f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest")
+            release = json.loads(r["text"])
+            assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
+            if not {"veyq-update.zip", "veyq-update.json"}.issubset(assets):
+                return {"ready": False, "message": "La release non contiene un pacchetto di aggiornamento."}
+            if any(not url.startswith(prefix) for url in assets.values()):
+                raise ValueError("Asset pubblicato fuori dal repository autorizzato.")
+            manifest = json.loads(public_request(assets["veyq-update.json"])["text"])
+        except RuntimeError as error:
+            if not re.match(r'HTTP (403|429):', str(error)):
+                raise
+            # Public API quotas require no account: use GitHub's official asset
+            # route, then pin the ZIP to the signed revision. All normal
+            # signature, monotonic-version and bundle checks still apply.
+            manifest = json.loads(public_request(f"https://github.com/{UPDATE_REPO}/releases/latest/download/veyq-update.json")["text"])
+            assets = {'veyq-update.zip':prefix+'build-'+str(manifest.get('commit',''))+'/veyq-update.zip'}
         verify_manifest(manifest)
         if not re.fullmatch(r"[a-f0-9]{40}", manifest.get("commit", "")):
             raise ValueError("Identificatore versione non valido.")

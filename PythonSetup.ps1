@@ -59,7 +59,7 @@ function Find-CurrentPython($Release, [string]$Root) {
 }
 
 function Install-CurrentPython([string]$Root, [string]$Series = '') {
-    Write-Host '[1/4] Checking the latest stable Python release...'
+    Write-Host '[1/5] Checking the latest stable Python release...'
     $release = Get-LatestPythonRelease $Series
     if ($Series) { $release.series = $Series }
     $existing = Find-CurrentPython $release $Root

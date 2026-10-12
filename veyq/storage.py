@@ -19,7 +19,7 @@ DEFAULTS = {
     "github_repo": "", "context_chars": 60000, "auto_update": True, "vision": False,
     "execution_environment": "host",
     "desktop_scope": "all", "background_schedules": False,
-    "image_provider": "disabled", "image_url": "http://127.0.0.1:7860", "image_model": "",
+    "image_provider": "managed", "image_url": "http://127.0.0.1:7860", "image_model": "",
     "context_tokens": 16384, "response_tokens": 4096,
     "collapsed_projects": [],
     "disabled_tools": [],
