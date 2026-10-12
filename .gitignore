@@ -64,6 +64,7 @@ coverage/
 /proposals/
 /plugins/
 /voice-models/
+/image-engine/
 /windows-sandboxes/
 background-task.json
 background-task.xml

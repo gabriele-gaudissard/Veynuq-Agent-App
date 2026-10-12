@@ -12,19 +12,29 @@ import time
 from pathlib import Path
 
 
-def generate(settings,token,prompt,width,height,cancel):
+def generate(settings,token,prompt,width,height,cancel,data_root=None):
     if settings.get('image_provider','disabled') == 'disabled':
         raise RuntimeError('Configure an image engine in Settings to generate images. Local image engines need no account; remote providers may need a vault token.')
     if not prompt.strip() or len(prompt)>10000: raise ValueError('Image prompt must contain 1–10000 characters.')
     if any(type(n) is not int or n<256 or n>1536 or n%64 for n in (width,height)):
         raise ValueError('Image dimensions must be multiples of 64 between 256 and 1536.')
     from .engine import validate_endpoint
-    validate_endpoint(settings['image_url'],settings['network'])
+    managed = settings.get('image_provider') == 'managed'
+    if managed:
+        if data_root is None: raise ValueError('Managed image engine profile is missing.')
+        if width>768 or height>768: raise ValueError('The built-in SD 1.5 engine supports up to 768 pixels per side; 512 is recommended.')
+    else: validate_endpoint(settings['image_url'],settings['network'])
     env={k:v for k,v in os.environ.items() if not re.search(r'(?i)(token|secret|password|api_key|credential)',k)}
     env['PYTHONIOENCODING']='utf-8'
-    process=subprocess.Popen([sys.executable,'-m','veyq.image_generation'],
-        cwd=Path(__file__).resolve().parent.parent,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
-        text=True,encoding='utf-8',**({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
+    import tempfile
+    scratch=tempfile.TemporaryDirectory(prefix='veynuq-image-') if managed else None
+    try:
+        process=subprocess.Popen([sys.executable,'-m','veyq.image_generation'],
+            cwd=Path(__file__).resolve().parent.parent,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+            text=True,encoding='utf-8',**({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
+    except Exception:
+        if scratch: scratch.cleanup()
+        raise
     result_queue=queue.Queue(maxsize=1)
     def read():
         try:
@@ -35,9 +45,10 @@ def generate(settings,token,prompt,width,height,cancel):
     reader=threading.Thread(target=read,daemon=True)
     try:
         request={key:settings.get(key) for key in ('image_provider','image_url','image_model','network')}
+        if managed: request.update(data_root=str(data_root),scratch=scratch.name)
         process.stdin.write(json.dumps({**request,'token':token,'prompt':prompt,'width':width,'height':height})+'\n')
         process.stdin.flush(); reader.start()
-        deadline=time.monotonic()+180
+        deadline=time.monotonic()+(1200 if managed else 180)
         while time.monotonic()<deadline:
             if cancel.is_set(): raise RuntimeError('Image generation stopped. No output file was written; the provider may still finish its request.')
             try: result=result_queue.get(timeout=.2)
@@ -46,10 +57,21 @@ def generate(settings,token,prompt,width,height,cancel):
             return base64.b64decode(result['png'],validate=True),result['width'],result['height']
         raise TimeoutError('Image engine timed out. No output file was written.')
     finally:
-        if process.poll() is None: process.kill()
+        if process.poll() is None:
+            if os.name=='nt':
+                try:subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW,timeout=10)
+                except (OSError,subprocess.TimeoutExpired):pass
+            if process.poll() is None: process.kill()
         process.wait(timeout=10)
         for stream in (process.stdin,process.stdout): stream.close()
         if reader.is_alive(): reader.join(timeout=1)
+        if scratch:
+            # Windows may retain a killed child's cwd handle briefly after taskkill returns.
+            for attempt in range(25):
+                try:scratch.cleanup();break
+                except PermissionError:
+                    if attempt==24:raise
+                    time.sleep(.2)
 
 
 def worker(request):
@@ -58,8 +80,24 @@ def worker(request):
     from .engine import validate_endpoint
     from .network import public_request
     from urllib.parse import urlsplit
-    base=validate_endpoint(request['image_url'],request['network'])
     width,height=request['width'],request['height']
+    if request['image_provider']=='managed':
+        from .image_setup import verify
+        executable, model = verify(request['data_root'])
+        # The parent owns and removes this directory even after a forced Stop.
+        root=Path(request['scratch']); prompt=root/'prompt.txt'; destination=root/'output.png'
+        prompt.write_text(request['prompt'],encoding='utf-8')
+        command=[str(executable),'-m',str(model),'--backend','cpu','--type','f16','--threads',str(min(8,os.cpu_count() or 4)),
+                 '--prompt-file',str(prompt),'-W',str(width),'-H',str(height),'--steps','20','--seed','-1',
+                 '--disable-image-metadata','--log-level','error','-o',str(destination)]
+        subprocess.run(command,cwd=root,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                       timeout=1100,check=True,**({'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {}))
+        if destination.stat().st_size>15_000_000: raise ValueError('Generated image exceeds 15 MB.')
+        with Image.open(destination) as pixels:
+            if pixels.size!=(width,height): raise ValueError('Unexpected image dimensions.')
+            pixels.load(); output=io.BytesIO(); pixels.convert('RGB').save(output,format='PNG')
+            return {'ok':True,'png':base64.b64encode(output.getvalue()).decode('ascii'),'width':width,'height':height}
+    base=validate_endpoint(request['image_url'],request['network'])
     local_sd=request['image_provider']=='local_sd'
     if request['image_provider'] not in {'local_sd','compatible'}: raise ValueError('Unknown image engine.')
     payload={'prompt':request['prompt'],'width':width,'height':height,'steps':24,'batch_size':1,'n_iter':1,'save_images':False,'send_images':True} if local_sd else {'prompt':request['prompt'],'model':request['image_model'],'n':1,'size':f'{width}x{height}'}

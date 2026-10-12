@@ -48,7 +48,7 @@
           ><button id="memory">◇ Local memory</button
           ><button id="toolsButton">⌘ Tools</button
           ><button id="settingsButton">⚙ Settings</button>
-          <div class="sub">Desktop agent · v4.4<br />No telemetry</div>
+          <div class="sub">Desktop agent · v4.5<br />No telemetry</div>
         </div>
       </aside>
       <main>
@@ -222,8 +222,13 @@
       <section class="dialog">
         <h2>Plugins</h2>
         <p class="intro">Add skills, commands and MCP tools. Compatible components of Claude Code plugins can be imported from a folder.</p>
-        <p class="sub">External code runs with your Windows permissions when used. Install only plugins you trust. Hooks, LSP and automatic account sign-in are not supported. Accounts are requested only when a service needs them.</p>
+        <p class="sub">External code runs with your Windows permissions when used. Review and trust the source. Command hooks run only through an approved tool action. Accounts are needed only for services that require them.</p>
         <div class="buttons"><button id="importPlugin">Import plugin folder</button></div>
+        <details><summary>Plugin marketplace</summary>
+          <label class="field">Public GitHub marketplace<input id="marketplaceRepo" value="anthropics/claude-plugins-official" placeholder="owner/repository" maxlength="200"></label>
+          <button id="browseMarketplace">Browse marketplace</button>
+          <p id="marketplaceStatus" class="sub" role="status"></p><div id="marketplaceList"></div>
+        </details>
         <details><summary>Add an MCP server</summary>
           <label class="field">Plugin name<input id="mcpPluginName" placeholder="my-tools" maxlength="80"></label>
           <label class="field">MCP configuration<textarea id="mcpPluginConfig" rows="7" spellcheck="false" placeholder='{"mcpServers":{"service":{"type":"http","url":"https://example.com/mcp"}}}'></textarea></label>
@@ -231,6 +236,7 @@
           <button id="installMcp">Install MCP configuration</button>
         </details>
         <div id="pluginList"></div>
+        <p id="pluginAccountStatus" class="sub" role="status"></p><button id="cancelPluginAccount" hidden>Stop</button>
         <div class="buttons"><button id="closePlugins">Close</button></div>
       </section>
     </div>
@@ -420,11 +426,12 @@
               <label class="field">Context capacity (tokens)<input id="contextTokens" type="number" min="8192" max="65536" step="1024" value="16384" /><small>Higher context uses more memory. The installed model limit is respected.</small></label>
               <label class="field">Maximum response tokens<input id="responseTokens" type="number" min="512" max="8192" step="512" value="4096" /></label>
               <label class="check full-width"><input id="backgroundSchedules" type="checkbox" /><span>Run read-only schedules while the app is closed<small>Creates a visible Windows scheduled task for this signed-in user, without administrator rights. Checks every five minutes; opening Veynuq stops the worker. Nothing runs while signed out.</small></span></label>
-              <label class="field">Image engine<select id="imageProvider"><option value="disabled">Disabled</option><option value="local_sd">Local Stable Diffusion API</option><option value="compatible">Compatible image API</option></select></label>
+              <label class="field"><span class="model-select-row"><span>Image engine</span><button type="button" id="imageInfo" aria-label="Image generation guide" title="Image generation guide">ⓘ</button></span><select id="imageProvider"><option value="disabled">Disabled</option><option value="managed">Built-in local engine — SD 1.5 (CPU)</option><option value="local_sd">Local Stable Diffusion API</option><option value="compatible">Compatible image API</option></select></label>
               <label class="field">Image endpoint<input id="imageEndpoint" type="url" placeholder="http://127.0.0.1:7860" /><small>Local: an already running Stable Diffusion API. Remote: HTTPS API base URL including /v1, when required.</small></label>
               <label class="field">Image model<input id="imageModel" maxlength="200" placeholder="Model name for the compatible API" /></label>
               <label class="field">Image provider token<input id="imageToken" type="password" autocomplete="off" /><small>Optional for a local engine. Stored separately in the vault; never put credentials in chat.</small></label>
               <button id="clearImageToken">Remove image token</button>
+              <div class="full-width"><button id="prepareImageEngine">Prepare local image engine</button> <button id="testImageEngine">Test image engine</button> <button id="cancelImageSetup" hidden>Stop</button><p id="imageSetupStatus" role="status"></p></div>
             </div>
           </details>
         </div>
@@ -451,6 +458,9 @@
           ><button class="primary" id="saveSettings">Save settings</button>
         </div>
       </section>
+    </div>
+    <div aria-modal="true" class="modal" id="imageHelpModal" role="dialog" aria-labelledby="imageHelpTitle">
+      <section class="dialog"><h2 id="imageHelpTitle">Image generation guide</h2><div id="imageHelpContent"></div><div class="buttons"><button id="closeImageHelp">Close</button></div></section>
     </div>
     <div aria-modal="true" class="modal" id="artifactModal" role="dialog">
       <section class="dialog"><h2>Generated image</h2><p id="artifactPath"></p><img id="artifactImage" alt="Generated image" /><div class="buttons"><button id="closeArtifact">Close</button></div></section>
@@ -576,8 +586,9 @@ Contents will appear here. Credential files are excluded.</pre>
         </div>
         <div id="modelInfoContent"></div>
         <div class="buttons">
-          <button id="modelSource">Source</button>
+          <button id="modelSource">Source</button><button id="testModelActions">Test autonomous actions</button><button id="cancelModelCheck" hidden>Stop</button>
         </div>
+        <p id="modelCheckStatus" role="status"></p>
       </section>
     </div>
     <div aria-modal="true" class="modal" id="questionModal" role="dialog">

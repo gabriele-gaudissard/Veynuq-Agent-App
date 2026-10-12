@@ -832,6 +832,67 @@ action('prepareWindowsSandbox',async () => {
 });
 action('closeArtifact',() => { $('artifactImage').removeAttribute('src'); close('artifactModal'); });
 
+let imageSetupTimer=null, imageStatusPolling=false, imagePreviewShown=false;
+const imageGuide = [
+  'The chat model and image model are separate. An image engine must be prepared or configured before generation.',
+  'Built-in local engine: choose SD 1.5 (CPU), click Prepare local image engine and wait for the verified download (approximately 4.3 GB). It needs Windows x64, approximately 5 GB free disk space, at least 12 GB RAM and preferably 16 GB or more. No account, server, Python package or subscription is required.',
+  'Save settings after choosing the engine, then click Test image engine. The test generates one 256×256 image. In chat, ask: Generate a watercolor landscape at 512×512 and save it as landscape.png in the linked folder.',
+  'SD 1.5 is a lightweight older model suited to illustrations and simple pictures. English prompts usually work best. Fine text and complex compositions are less reliable. CPU generation can take several minutes; use 512×512, up to 768 pixels per side. Stop remains available and prevents the output write.',
+  'Local Stable Diffusion API: start an already installed WebUI with --api, select its checkpoint and enter its base URL, for example http://127.0.0.1:7860. Leave the Veynuq image model field empty; the WebUI chooses the model. Keep that engine running.',
+  'Compatible image API: enter the provider HTTPS base URL including /v1 if required, the exact image model name and its token in the vault field. Do not append /images/generations yourself. Online access is required and the provider may charge for the test and subsequent images.',
+  'The local image engine processes prompts and pictures offline. A remote chat provider still receives your conversation. Preparing the engine contacts GitHub and Hugging Face. Remote image generation sends the prompt to the configured provider. Tokens stay in the Windows vault; never paste them into chat.',
+  'If generation fails: check that settings were saved, the engine is ready, the URL and image model match the provider, enough memory is available and the requested image size is supported. A chat model must use the generate_image tool to create an actual file.',
+];
+function updateImageFields() {
+  const managed=['managed','disabled'].includes($('imageProvider').value);
+  for(const id of ['imageEndpoint','imageModel','imageToken']) $(id).disabled=managed;
+}
+function showImageGuide() {
+  const host=$('imageHelpContent');host.replaceChildren();
+  for(const text of imageGuide) { const p=document.createElement('p');p.textContent=ui(text);host.append(p); }
+  open('imageHelpModal');
+}
+async function pollImageSetup() {
+  if(imageStatusPolling || !api?.image_engine_status) return;
+  imageStatusPolling=true;
+  try {
+    const state=await call('image_engine_status');
+    const active=['downloading','testing'].includes(state.state);
+    $('prepareImageEngine').disabled=active; $('testImageEngine').disabled=active;
+    $('cancelImageSetup').hidden=!active;
+    const text=state.state==='downloading' ? ui('Downloading image engine')+(state.total?' · '+Math.floor(state.downloaded/state.total*100)+'%':'')
+      : state.state==='testing' ? ui('Generating test image — CPU may take several minutes')
+      : state.state==='error' ? ui(state.error)
+      : state.state==='stopped' ? ui('Image operation stopped')
+      : state.state==='tested' ? ui('Image generation test passed')
+      : state.ready ? ui('Local image engine ready') : ui('Local image engine not prepared');
+    $('imageSetupStatus').textContent=text;
+    if(state.state==='tested' && state.data_url && !imagePreviewShown) {
+      imagePreviewShown=true;
+      $('artifactImage').src=state.data_url;$('artifactPath').textContent=ui('Image generation test passed');open('artifactModal');
+    }
+    if(!active && imageSetupTimer) { clearInterval(imageSetupTimer);imageSetupTimer=null; }
+  } finally { imageStatusPolling=false; }
+}
+function watchImageSetup() {
+  if(!imageSetupTimer) imageSetupTimer=setInterval(()=>pollImageSetup().catch(e=>toast(e.message)),750);
+  pollImageSetup().catch(e=>toast(e.message));
+}
+action('imageInfo',showImageGuide);
+action('closeImageHelp',()=>close('imageHelpModal'));
+$('imageProvider').addEventListener('change',updateImageFields);
+action('prepareImageEngine',async()=>{
+  if(!confirm(ui('Download and install the optional local image engine and SD 1.5 model (approximately 4.3 GB)? No account is needed.'))) return;
+  await call('prepare_image_engine',true);watchImageSetup();
+});
+action('testImageEngine',async()=>{
+  const saved=await call('get_settings');
+  if(saved.image_provider!==$('imageProvider').value || saved.image_url!==$('imageEndpoint').value.trim() || saved.image_model!==$('imageModel').value.trim() || $('imageToken').value) throw Error(ui('Save the image settings before testing.'));
+  if(!confirm(ui('Generate one test image with the saved engine? A remote provider may charge for it.')+'\n'+(saved.image_provider==='managed'?ui('Built-in local engine — SD 1.5 (CPU)'):saved.image_url))) return;
+  imagePreviewShown=false;await call('test_image_engine',true);watchImageSetup();
+});
+action('cancelImageSetup',async()=>{await call('cancel_image_setup');watchImageSetup();});
+
 async function showSettings() {
   settings = await call("get_settings");
   $("language").value = settings.lang;
@@ -868,6 +929,8 @@ async function showSettings() {
   $("fullConfirm").style.display =
     settings.permission === "full" ? "flex" : "none";
   $("dataDir").textContent = settings.data_dir;
+  updateImageFields();
+  pollImageSetup().catch(e=>toast(e.message));
   open("settingsModal");
 }
 async function showTools() {
@@ -932,14 +995,28 @@ async function showPlugins() {
       finally { check.disabled=false; }
     });
     const detail = document.createElement('details'); const summary = document.createElement('summary');summary.textContent=ui('Components and connection');
-    const preview=document.createElement('pre'); preview.textContent=JSON.stringify({skills:Object.keys(plugin.skills),servers:plugin.servers,unsupported:plugin.unsupported},null,2); detail.append(summary,preview);
+    const preview=document.createElement('pre'); preview.textContent=JSON.stringify({skills:Object.keys(plugin.skills),servers:plugin.servers,hooks:plugin.hooks,lsp:plugin.lsp,source:plugin.source,unsupported:plugin.unsupported},null,2); detail.append(summary,preview);
+    const accounts=document.createElement('div');
+    for(const [server,connected] of Object.entries(plugin.accounts || {})) {
+      const button=document.createElement('button');button.textContent=server+' · '+ui(connected?'Disconnect account':'Connect account');
+      button.disabled=!plugin.enabled;
+      button.addEventListener('click',async()=>{
+        try {
+          if(connected) {
+            if(confirm(ui('Remove local sign-in tokens? This does not revoke access at the service.'))) {await call('disconnect_plugin_account',plugin.id,server);await showPlugins();}
+          } else if(confirm(ui('Check this server and open its sign-in page only if authentication is required? Complete authorization personally in your browser.'))) {
+            await call('connect_plugin_account',plugin.id,server,true);pollPluginAccount();
+          }
+        } catch(e){toast(String(e.message||e));}
+      });accounts.append(button);
+    }
     const credentials=document.createElement('details');const credentialSummary=document.createElement('summary');credentialSummary.textContent=ui('Optional service token');
     const token=document.createElement('input'); token.type='password';token.autocomplete='off';token.placeholder=ui(plugin.has_token?'Saved in vault; leave blank to keep it':'Only if the service requires authentication'); token.setAttribute('aria-label',ui('Optional service token'));
     const save=document.createElement('button'); save.textContent=ui('Save token'); save.addEventListener('click',async()=>{try{await call('save_plugin_token',plugin.id,token.value);token.value='';await showPlugins();}catch(e){toast(String(e.message||e));}});
     const clear=document.createElement('button'); clear.textContent=ui('Remove token');clear.addEventListener('click',async()=>{if(confirm(ui('Remove the saved service token?'))){try{await call('save_plugin_token',plugin.id,'',true);await showPlugins();}catch(e){toast(String(e.message||e));}}});
     credentials.append(credentialSummary,token,save,clear);
     const remove=document.createElement('button');remove.textContent=ui('Uninstall plugin');remove.addEventListener('click',async()=>{if(confirm(ui('Uninstall this plugin and remove its saved token?'))){try{await call('remove_plugin',plugin.id);await showPlugins();}catch(e){toast(String(e.message||e));}}});
-    row.append(heading,description,enabled,detail,credentials,remove);host.append(row);
+    row.append(heading,description,enabled,detail,accounts,credentials,remove);host.append(row);
   }
   open('pluginsModal');
 }
@@ -948,6 +1025,38 @@ action('pluginsButton',showPlugins);
 action('closePlugins',()=>close('pluginsModal'));
 action('importPlugin',async()=>{if(confirm(ui(pluginConfirmation))){await call('install_plugin_folder',true);await showPlugins();}});
 action('installMcp',async()=>{if(confirm(ui(pluginConfirmation))){await call('install_mcp_config',$('mcpPluginName').value.trim(),$('mcpPluginConfig').value,true);$('mcpPluginConfig').value='';await showPlugins();}});
+let pluginAccountTimer;
+async function pollPluginAccount() {
+  clearTimeout(pluginAccountTimer);
+  try {
+    const status=await call('plugin_account_status');
+    $('cancelPluginAccount').hidden=status.state!=='connecting';
+    $('pluginAccountStatus').textContent=status.state==='connecting'?ui('Waiting for account authorization'):status.state==='connected'?ui('Server connection verified'):status.state==='stopped'?ui('Account connection stopped'):status.error || '';
+    if(status.state==='connecting')pluginAccountTimer=setTimeout(pollPluginAccount,750);
+    else if(status.state==='connected')await showPlugins();
+  } catch(e){toast(String(e.message||e));}
+}
+action('cancelPluginAccount',async()=>{await call('cancel_plugin_account');await pollPluginAccount();});
+action('browseMarketplace',async()=>{
+  const host=$('marketplaceList');host.replaceChildren();$('marketplaceStatus').textContent=ui('Loading marketplace');
+  const result=await call('get_plugin_marketplace',$('marketplaceRepo').value.trim());
+  $('marketplaceStatus').textContent=result.repository+' · '+result.revision;
+  for(const plugin of result.plugins) {
+    const row=document.createElement('section');row.className='tool-category';
+    const title=document.createElement('h3');title.textContent=plugin.name;
+    const description=document.createElement('p');description.textContent=plugin.description;
+    const button=document.createElement('button');button.textContent=ui(plugin.supported?'Review and install':'Unsupported source');button.disabled=!plugin.supported;
+    button.addEventListener('click',async()=>{
+      button.disabled=true;
+      try {
+        const reviewed=await call('review_marketplace_plugin',result.repository,result.revision,plugin.name);
+        if(confirm(ui(pluginConfirmation)+'\n\n'+reviewed.repository+'\n'+reviewed.commit+'\n'+reviewed.path)) {
+          await call('install_marketplace_plugin',result.repository,result.revision,plugin.name,reviewed,true);await showPlugins();
+        }
+      } catch(e){toast(String(e.message||e));}finally{button.disabled=false;}
+    });row.append(title,description,button);host.append(row);
+  }
+});
 async function saveSettings() {
   await call("save_settings", {
     lang: $("language").value,
@@ -1414,6 +1523,7 @@ async function showModelInfo(name) {
     list.append(key, val);
   }
   $("modelInfoContent").append(list);
+  $('modelCheckStatus').textContent=ui(m.autonomy_check?.state==='passed'?'Controlled file action test passed':m.autonomy_check?.state==='failed'?'Controlled file action test failed':'Autonomous actions not tested');
   for (const [label, text] of [
     ["Suggested uses", m.uses],
     ["Limitations", m.limitations],
@@ -1575,6 +1685,24 @@ action("cancelDownload", () => call("cancel_model_action"));
 action("openCatalog", showCatalog);
 action("closeCatalog", () => close("catalogModal"));
 action("modelInfo", () => showModelInfo($("model").value));
+let modelCheckTimer=null, modelCheckPolling=false;
+async function pollModelCheck() {
+  if(modelCheckPolling) return;
+  modelCheckPolling=true;
+  try {
+    const result=await call('model_check_status');const active=result.state==='running';
+    $('testModelActions').disabled=active;$('cancelModelCheck').hidden=!active;
+    $('modelCheckStatus').textContent=ui(active?'Testing actions in a temporary folder':result.state==='passed'?'Controlled file action test passed':result.state==='failed'?'Controlled file action test failed':result.error||'Model test stopped');
+    if(!active && modelCheckTimer){clearInterval(modelCheckTimer);modelCheckTimer=null;}
+  } finally { modelCheckPolling=false; }
+}
+action('testModelActions',async()=>{
+  if(!confirm(ui('Test this model using only one temporary file? No personal files or PC settings are accessible. Requests go to the configured model provider; a remote provider may charge.'))) return;
+  await call('test_model_actions',infoModel,true);
+  if(!modelCheckTimer)modelCheckTimer=setInterval(()=>pollModelCheck().catch(e=>toast(e.message)),750);
+  await pollModelCheck();
+});
+action('cancelModelCheck',async()=>{await call('cancel_model_check');await pollModelCheck();});
 action("installedModelInfo", () => showModelInfo($("installedModels").value));
 action("catalogChoiceInfo", () => showModelInfo($("catalogChoice").value));
 action("customModelInfo", () => showModelInfo($("customModel").value.trim()));

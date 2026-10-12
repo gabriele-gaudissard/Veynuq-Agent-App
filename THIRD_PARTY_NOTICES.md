@@ -27,6 +27,9 @@ Additional runtime components:
 | Pillow | Window screenshot encoding | HPND |
 | MCP Python SDK | Plugin tool transports | MIT |
 | jsonschema | External tool argument validation | MIT |
+| Jedi / Parso | Static Python code intelligence | MIT |
+| stable-diffusion.cpp | Optional separately downloaded local image runtime | MIT |
+| Stable Diffusion 1.5 | Optional separately downloaded image weights | CreativeML Open RAIL-M |
 | Playwright | Isolated Edge browser control | Apache-2.0 |
 | faster-whisper | Local speech transcription | MIT |
 | Whisper model by OpenAI, converted by Systran | Separately downloaded multilingual speech weights | MIT |
@@ -37,3 +40,5 @@ Additional runtime components:
 | highlight.js | Source-code highlighting | BSD-3-Clause; bundled license in assets/vendor |
 
 The original Veynuq marks are project artwork. Logo rebuild tooling uses resvg/Pillow and is optional development tooling. Node/jsdom are used only for UI tests, not shipped as a desktop runtime.
+
+The optional image setup stores the upstream engine license, model license and model card beside the downloaded files. The weights are not redistributed in the app ZIP.

@@ -23,6 +23,15 @@ class DesktopAPI:
         self._maintenance = threading.Lock()
         self._model_cancel = threading.Event()
         self._model_response = None
+        self._image_cancel = threading.Event()
+        self._image_status_lock = threading.RLock()
+        self._image_status = {'state':'idle'}
+        self._model_check_cancel = threading.Event()
+        self._model_check_client = None
+        self._model_check_status = {'state':'idle'}
+        self._plugin_account_cancel=threading.Event()
+        self._plugin_account_runner=None
+        self._plugin_account_status={'state':'idle'}
         from .voice import VoiceInput
         self._voice = VoiceInput(self._store.root)
         from .scheduling import Scheduler
@@ -39,12 +48,17 @@ class DesktopAPI:
         if self._agent.busy or self._maintenance.locked():
             raise RuntimeError("Attendi la fine dell'attivita' prima di cambiare configurazione.")
 
+    def _begin_setup(self):
+        with self._agent.lock:
+            self._idle()
+            if not self._maintenance.acquire(blocking=False):raise RuntimeError('Another setup is running.')
+
     def get_settings(self):
         s = self._store.snapshot()["settings"]
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.4.0"
+        s["version"] = "4.5.0"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -59,7 +73,8 @@ class DesktopAPI:
             ('GitHub', 'Read and update repositories, issues, pull requests, branches and releases.', {'github'}),
             ('Images and documents', 'Inspect image files, generate PNGs with a configured image engine and read PDF/DOCX documents. Create documents, spreadsheets and charts with project code.', {'view_image','read_document','generate_image'}),
             ('Memory and task control', 'Maintain local memory, plan work, ask essential questions and use context from related project chats.', {'save_memory','update_plan','ask_user','read_project_context','checkpoint_task','load_procedure','delegate_tasks'}),
-            ('Plugins', 'Load installed skills and connect to reviewed MCP tools when needed.', {'plugin_catalog','plugin_tools','plugin_call'}),
+            ('Code intelligence', 'Navigate Python symbols, definitions, references and syntax diagnostics without executing project code.', {'code_intelligence'}),
+            ('Plugins', 'Load installed skills and connect to reviewed MCP tools when needed.', {'plugin_catalog','plugin_tools','plugin_call','plugin_extension'}),
         ]
         disabled=set(self._store.snapshot()['settings'].get('disabled_tools', []))
         return {'total': len(names), 'enabled':len(names-disabled), 'groups': [{'name': title,'description': description,'count': len(tools & names),
@@ -89,8 +104,10 @@ class DesktopAPI:
 
     def get_plugins(self):
         from .plugins import Plugins
+        from .plugin_oauth import key_for,AccountStorage
         manager=Plugins(self._store)
-        return {'plugins':[{**row,'has_token':bool(self._store.vault.get('plugin:'+row['id']))} for row in manager.catalog()]}
+        return {'plugins':[{**row,'has_token':bool(self._store.vault.get('plugin:'+row['id'])),
+            'accounts':{name:bool(AccountStorage(self._store.root,key_for(row['id'],name)).read().get('tokens')) for name,cfg in row['servers'].items() if 'url' in cfg}} for row in manager.catalog()]}
 
     def install_plugin_folder(self, confirmed=False):
         with self._agent.lock:
@@ -117,6 +134,63 @@ class DesktopAPI:
                 (root/'plugin.json').write_text(json.dumps({'name':name}),encoding='utf-8')
                 (root/'.mcp.json').write_text(json.dumps(parsed),encoding='utf-8')
                 return Plugins(self._store).install(root)
+
+    def get_plugin_marketplace(self, repository):
+        self._idle()
+        if not self.get_settings()['network']:raise PermissionError('Enable online access to read a marketplace.')
+        from .plugin_marketplace import catalog
+        with self._maintenance:return catalog(repository)
+
+    def review_marketplace_plugin(self, repository, revision, name):
+        self._idle()
+        if not self.get_settings()['network']:raise PermissionError('Enable online access to read a marketplace.')
+        from .plugin_marketplace import selection
+        with self._maintenance:return selection(repository,revision,name)
+
+    def install_marketplace_plugin(self, repository, revision, name, reviewed_source, confirmed=False):
+        self._idle()
+        if confirmed is not True:raise ValueError('Review and confirm marketplace plugin installation.')
+        if not self.get_settings()['network']:raise PermissionError('Enable online access to install a plugin.')
+        from .plugin_marketplace import install
+        with self._maintenance:return install(self._store,repository,revision,name,reviewed_source)
+
+    def connect_plugin_account(self, plugin_id, server, confirmed=False):
+        self._idle()
+        if confirmed is not True:raise ValueError('Confirm opening the account authorization browser.')
+        if not self.get_settings()['network']:raise PermissionError('Enable online access to connect an account.')
+        from .plugins import Plugins,invoke
+        row,config=Plugins(self._store).server(plugin_id,server)
+        if 'url' not in config:raise ValueError('Browser account sign-in is available for HTTP MCP servers only.')
+        self._begin_setup()
+        self._plugin_account_cancel.clear();self._plugin_account_status={'state':'connecting'}
+        def run():
+            from .tools import ToolRunner
+            runner=ToolRunner(self._store,self.get_settings(),'plugin-account',self._plugin_account_cancel,lambda *a:None,lambda *a:False,ROOT)
+            self._plugin_account_runner=runner
+            try:
+                result=invoke(runner,plugin_id,server,interactive=True)
+                self._plugin_account_status={'state':'connected','tools':len(result.get('tools',[]))}
+            except Exception as error:self._plugin_account_status={'state':'stopped' if self._plugin_account_cancel.is_set() else 'error','error':redact(str(error),Plugins(self._store).credentials())[:1500]}
+            finally:
+                runner.close();self._plugin_account_runner=None;self._maintenance.release()
+        threading.Thread(target=run,daemon=True).start()
+        return {'state':'connecting'}
+
+    def plugin_account_status(self):return dict(self._plugin_account_status)
+
+    def cancel_plugin_account(self):
+        self._plugin_account_cancel.set()
+        if self._plugin_account_runner:self._plugin_account_runner.stop_process()
+        return {'ok':True}
+
+    def disconnect_plugin_account(self, plugin_id, server):
+        self._idle()
+        from .plugins import Plugins
+        from .plugin_oauth import key_for
+        row=Plugins(self._store).record(plugin_id,False)
+        if server not in row['servers']:raise ValueError('Unknown MCP server.')
+        self._store.vault.set(key_for(plugin_id,server),'')
+        return {'ok':True}
 
     def set_plugin_enabled(self, plugin_id, enabled):
         with self._agent.lock:
@@ -160,9 +234,9 @@ class DesktopAPI:
             if type(s['background_schedules']) is not bool: raise ValueError('Invalid background setting.')
             if type(s['context_tokens']) is not int or not 8192<=s['context_tokens']<=65536: raise ValueError('Context tokens must be between 8192 and 65536.')
             if type(s['response_tokens']) is not int or not 512<=s['response_tokens']<=8192: raise ValueError('Response tokens must be between 512 and 8192.')
-            if s['image_provider'] not in {'disabled','local_sd','compatible'}: raise ValueError('Unknown image engine.')
+            if s['image_provider'] not in {'disabled','managed','local_sd','compatible'}: raise ValueError('Unknown image engine.')
             if not isinstance(s['image_model'],str) or len(s['image_model'])>200: raise ValueError('Invalid image model name.')
-            if s['image_provider']!='disabled':
+            if s['image_provider'] not in {'disabled','managed'}:
                 validate_endpoint(s['image_url'],s['network'])
                 if s['image_provider']=='local_sd':
                     from urllib.parse import urlsplit
@@ -620,6 +694,92 @@ class DesktopAPI:
         with self._maintenance:
             return setup_engine(self._store.root)
 
+    def image_engine_status(self):
+        from .image_setup import ready
+        with self._image_status_lock:
+            return {**self._image_status,'ready':ready(self._store.root)}
+
+    def model_check_status(self):
+        with self._image_status_lock: return dict(self._model_check_status)
+
+    def cancel_model_check(self):
+        self._model_check_cancel.set()
+        if self._model_check_client: self._model_check_client.close()
+        return {'ok':True}
+
+    def test_model_actions(self, model, confirmed=False):
+        self._idle()
+        if confirmed is not True: raise ValueError('Confirm the controlled model test.')
+        if not isinstance(model,str) or not model.strip() or len(model)>200: raise ValueError('Choose a model.')
+        self._begin_setup()
+        self._model_check_cancel.clear()
+        settings={**self._store.snapshot()['settings'],'model':model}
+        with self._image_status_lock: self._model_check_status={'state':'running','model':model}
+        def active(client): self._model_check_client=client
+        def work():
+            try:
+                from .model_check import check
+                result=check(settings,self._store.vault.get('provider'),self._model_check_cancel,active)
+                if self._model_check_cancel.is_set(): raise RuntimeError('Model test stopped.')
+                import time
+                result.update(model=model,checked_at=time.time(),provider=settings['provider'])
+                with self._store.lock:
+                    key=settings['provider']+'|'+settings['url']+'|'+model
+                    self._store.data.setdefault('model_checks',{})[key]=result
+                    self._store.save()
+                with self._image_status_lock: self._model_check_status=result
+            except Exception as error:
+                with self._image_status_lock: self._model_check_status={'state':'stopped' if self._model_check_cancel.is_set() else 'error','error':redact(str(error),[self._store.vault.get('provider')])[:500],'model':model}
+            finally: self._maintenance.release()
+        threading.Thread(target=work,daemon=True).start()
+        return self.model_check_status()
+
+    def cancel_image_setup(self):
+        self._image_cancel.set()
+        return {'ok':True}
+
+    def prepare_image_engine(self, confirmed=False):
+        self._idle()
+        if confirmed is not True: raise ValueError('Confirm downloading the optional local image engine and model (approximately 4.3 GB).')
+        if not self._store.snapshot()['settings']['network']: raise PermissionError('Enable online access to download the image engine.')
+        self._begin_setup()
+        self._image_cancel.clear()
+        with self._image_status_lock: self._image_status={'state':'downloading'}
+        def progress(value):
+            with self._image_status_lock: self._image_status={'state':'downloading',**value}
+        def work():
+            try:
+                from .image_setup import prepare
+                result=prepare(self._store.root,self._image_cancel,progress)
+                if self._image_cancel.is_set():raise RuntimeError('Image setup stopped.')
+                with self._image_status_lock: self._image_status={'state':'completed',**result}
+            except Exception as error:
+                with self._image_status_lock: self._image_status={'state':'stopped' if self._image_cancel.is_set() else 'error','error':str(error)[:500]}
+            finally: self._maintenance.release()
+        threading.Thread(target=work,daemon=True).start()
+        return self.image_engine_status()
+
+    def test_image_engine(self, confirmed=False):
+        self._idle()
+        if confirmed is not True: raise ValueError('Confirm generating one test image with the configured provider.')
+        settings=self._store.snapshot()['settings']
+        if settings['image_provider']=='disabled': raise ValueError('Select and save an image engine first.')
+        self._begin_setup()
+        self._image_cancel.clear()
+        with self._image_status_lock: self._image_status={'state':'testing'}
+        def work():
+            try:
+                from .image_generation import generate
+                import base64
+                pixels,width,height=generate(settings,self._store.vault.get('image'),'A small red robot standing in a green garden, watercolor illustration',256,256,self._image_cancel,data_root=self._store.root)
+                if self._image_cancel.is_set(): raise RuntimeError('Image generation stopped.')
+                with self._image_status_lock: self._image_status={'state':'tested','width':width,'height':height,'data_url':'data:image/png;base64,'+base64.b64encode(pixels).decode('ascii')}
+            except Exception as error:
+                with self._image_status_lock: self._image_status={'state':'stopped' if self._image_cancel.is_set() else 'error','error':redact(str(error),[self._store.vault.get('image')])[:500]}
+            finally: self._maintenance.release()
+        threading.Thread(target=work,daemon=True).start()
+        return self.image_engine_status()
+
     def finish_setup(self):
         with self._store.lock:
             self._store.data["settings"]["setup_completed"] = True
@@ -688,8 +848,10 @@ class DesktopAPI:
         info = estimate(name)
         s = self.get_settings()
         info["hardware"] = hardware(s["workspace"])
+        key=s['provider']+'|'+s['url']+'|'+name
+        info['autonomy_check']=self._store.snapshot().get('model_checks',{}).get(key)
         if s["provider"] != "local":
-            info = {**estimate("unknown"), "name": name, "hardware": info["hardware"], "metadata_origin": "Remote provider: local requirements do not apply"}
+            info = {**estimate("unknown"), "name": name, "hardware": info["hardware"], 'autonomy_check':info['autonomy_check'], "metadata_origin": "Remote provider: local requirements do not apply"}
             return info
         client = requests.Session()
         client.trust_env = False
@@ -830,7 +992,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.4.0", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.5.0", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates
@@ -854,6 +1016,9 @@ def foreground_main(data_dir):
         api.cancel_model_action()
         api._scheduler.stop_event.set()
         api._voice.close()
+        api.cancel_image_setup()
+        api.cancel_model_check()
+        api.cancel_plugin_account()
     window.events.closing += shutdown
     window.events.closed += shutdown
     webview.start(debug=False, icon=str(ROOT / "assets" / "brand" / "veynuq-dark.ico"))

@@ -938,3 +938,6 @@ summary:focus-visible {
  .tool-toggle input { width:18px; height:18px; flex:none; }
  #pluginList pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:280px; overflow:auto; }
  #pluginsModal details { margin:16px 0; }
+.model-select-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.model-select-row button { padding: 4px 11px; }
+#imageHelpContent p { line-height: 1.6; font-size: .92rem; margin-bottom: 16px; }

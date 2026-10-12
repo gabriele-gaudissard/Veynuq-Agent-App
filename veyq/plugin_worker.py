@@ -1,4 +1,4 @@
-"""One bounded MCP connection. No sampling, roots or automatic OAuth."""
+"""One bounded MCP connection; interactive sign-in only from the account button."""
 import asyncio
 import json
 import os
@@ -16,7 +16,23 @@ async def request(value):
     config = value['config']
     async with AsyncExitStack() as stack:
         if 'url' in config:
-            client = await stack.enter_async_context(httpx.AsyncClient(headers=config.get('headers',{}), timeout=60, trust_env=False, follow_redirects=False))
+            from .plugin_oauth import AccountStorage, Callback, CheckedTransport, provider
+            auth=None
+            headers=config.get('headers',{})
+            if value.get('oauth'):
+                account=value['oauth']
+                storage=AccountStorage(account['root'],account['key'])
+                callback=stack.enter_context(Callback(storage,account.get('interactive',False)))
+                auth=provider(storage,callback,config['url'])
+                headers={k:v for k,v in headers.items() if k.lower() not in {'authorization','cookie'}}
+            async def origin_headers(request):
+                # Configured service headers never accompany OAuth metadata/token calls to another origin.
+                from urllib.parse import urlsplit
+                original=urlsplit(config['url']);target=urlsplit(str(request.url))
+                if (original.scheme,original.hostname,original.port)!=(target.scheme,target.hostname,target.port):
+                    for key in headers:request.headers.pop(key,None)
+            client = await stack.enter_async_context(httpx.AsyncClient(headers=headers, auth=auth, transport=CheckedTransport(config['url']),
+                event_hooks={'request':[origin_headers]}, timeout=60, trust_env=False, follow_redirects=False))
             streams = await stack.enter_async_context(streamable_http_client(config['url'], http_client=client))
         else:
             # The SDK adds its small default PATH/SystemRoot set, never model/GitHub tokens.
@@ -65,5 +81,7 @@ if __name__=='__main__':
     except BaseException as error:
         # ExceptionGroups from transport failures should expose their useful leaf.
         while getattr(error,'exceptions',None): error=error.exceptions[0]
+        if getattr(getattr(error,'response',None),'status_code',None)==401:
+            error=PermissionError('This service requires authentication. Use Connect account or the optional token field in Tools → Plugins; never enter credentials in chat.')
         payload={'ok':False,'error':str(error)[:1500] or type(error).__name__}
     print(json.dumps(payload),flush=True)

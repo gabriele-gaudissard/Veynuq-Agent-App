@@ -148,6 +148,11 @@ class Plugins:
                 for location in ([commands] if isinstance(commands, str) else commands):
                     place = safe_path(target, location)
                     for file in ([place] if place.is_file() else sorted(place.glob('*.md'))): add_skill(file, file.stem)
+            for component,default,prefix in [('agents','agents','agent-'),('outputStyles','output-styles','style-')]:
+                locations=manifest.get(component,default)
+                for location in ([locations] if isinstance(locations,str) else locations):
+                    place=safe_path(target,location)
+                    for file in ([place] if place.is_file() else sorted(place.glob('*.md'))):add_skill(file,prefix+file.stem)
             if len(skills)>60 or any(not IDENTIFIER.fullmatch(k) for k in skills): raise ValueError('Invalid or excessive plugin skills.')
             servers = {}
             def merge_servers(value):
@@ -160,12 +165,12 @@ class Plugins:
                     servers[key] = validate_server(config)
             if (target/'.mcp.json').exists(): merge_servers('.mcp.json')
             if manifest.get('mcpServers'): merge_servers(manifest['mcpServers'])
-            if len(servers)>10 or not (skills or servers): raise ValueError('No supported skills, commands or MCP servers were found.')
-            unsupported = [key for key in ('hooks','agents','lspServers','outputStyles','userConfig','dependencies','experimental') if key in manifest]
-            for folder, key in [('hooks','hooks'),('agents','agents'),('output-styles','outputStyles')]:
-                if (target/folder).exists() and key not in unsupported: unsupported.append(key)
+            from .plugin_extensions import components
+            hooks,lsp=components(target,manifest)
+            if len(servers)>10 or not (skills or servers or hooks or lsp): raise ValueError('No supported skills, commands or MCP servers were found.')
+            unsupported = [key for key in ('userConfig','dependencies','experimental') if key in manifest]
             row = {'id':plugin_id, 'name':name, 'description':str(manifest.get('description',''))[:500], 'version':str(manifest.get('version',''))[:40],
-                   'enabled':True, 'skills':skills, 'servers':servers, 'files':files, 'unsupported':unsupported}
+                   'enabled':True, 'skills':skills, 'servers':servers, 'files':files, 'unsupported':unsupported,'hooks':hooks,'lsp':lsp}
             with self.store.lock:
                 self.store.data.setdefault('plugins', []).append(row)
                 self.store.save()
@@ -175,7 +180,9 @@ class Plugins:
             raise
 
     def public(self, row):
-        return {k: copy.deepcopy(row[k]) for k in ('id','name','description','version','enabled','skills','servers','unsupported')}
+        result={k: copy.deepcopy(row.get(k,{} if k in {'hooks','lsp'} else row[k])) for k in ('id','name','description','version','enabled','skills','servers','unsupported','hooks','lsp')}
+        if row.get('source'):result['source']=copy.deepcopy(row['source'])
+        return result
 
     def catalog(self):
         return [self.public(row) for row in self.records()]
@@ -193,6 +200,8 @@ class Plugins:
         if not target.is_relative_to(self.root.resolve()) or target == self.root.resolve(): raise ValueError('Invalid plugin folder.')
         if target.exists(): shutil.rmtree(target)
         self.store.vault.set('plugin:'+plugin_id, '')
+        from .plugin_oauth import key_for
+        for server in row['servers']:self.store.vault.set(key_for(plugin_id,server),'')
         with self.store.lock:
             self.store.data['plugins'] = [p for p in self.store.data['plugins'] if p['id']!=plugin_id]
             self.store.save()
@@ -211,10 +220,15 @@ class Plugins:
         return row, validate_server(row['servers'][server])
 
     def credentials(self):
-        return [self.store.vault.get('plugin:'+p['id']) for p in self.records()]
+        from .plugin_oauth import key_for,secrets_for
+        values=[]
+        for row in self.records():
+            values.append(self.store.vault.get('plugin:'+row['id']))
+            for server in row['servers']:values.extend(secrets_for(self.store.vault.get(key_for(row['id'],server))))
+        return values
 
 
-def invoke(runner, plugin_id, server, tool=None, arguments=None):
+def invoke(runner, plugin_id, server, tool=None, arguments=None, interactive=False):
     """A dedicated SDK process owns transport cleanup; Stop kills its tree."""
     manager = Plugins(runner.store)
     row, config = manager.server(plugin_id, server)
@@ -230,11 +244,16 @@ def invoke(runner, plugin_id, server, tool=None, arguments=None):
     config['args'] = [expand(v) for v in config.get('args', [])]
     for kind in ('env','headers'): config[kind] = {k:expand(v) for k,v in config.get(kind,{}).items()}
     config['env']['PYTHONDONTWRITEBYTECODE']='1'
-    if config.get('url') and token and 'Authorization' not in config['headers']: config['headers']['Authorization'] = 'Bearer '+token
+    if config.get('url') and token and not any(key.lower()=='authorization' for key in config['headers']): config['headers']['Authorization'] = 'Bearer '+token
     if 'url' in config and urlsplit(config['url']).hostname not in {'localhost','127.0.0.1','::1'}:
         from .network import public_target
         public_target(config['url'])
     request = {'config':config, 'cwd':root, 'tool':tool, 'arguments':arguments or {}}
+    if 'url' in config:
+        from .plugin_oauth import key_for,AccountStorage
+        key=key_for(plugin_id,server)
+        if interactive or AccountStorage(runner.store.root,key).read().get('tokens'):
+            request['oauth']={'root':str(runner.store.root),'key':key,'interactive':interactive}
     env = {k:v for k,v in os.environ.items() if not re.search(r'(?i)(token|secret|password|api_key|credential)', k)}
     env['PYTHONPATH'] = str(Path(__file__).resolve().parent.parent)
     env['PYTHONDONTWRITEBYTECODE'] = '1'
@@ -246,7 +265,7 @@ def invoke(runner, plugin_id, server, tool=None, arguments=None):
             runner.process.stdin.write(json.dumps(request).encode()); runner.process.stdin.close()
             while runner.process.poll() is None:
                 if runner.cancel.wait(.1): raise RuntimeError('Plugin operation interrupted; outcome may be unknown. Inspect the service before retrying.')
-                if time.monotonic()-started>90: raise TimeoutError('Plugin operation timed out; outcome may be unknown. Do not repeat a mutation blindly.')
+                if time.monotonic()-started>(360 if interactive else 90): raise TimeoutError('Plugin operation timed out; outcome may be unknown. Do not repeat a mutation blindly.')
                 if os.fstat(output.fileno()).st_size + os.fstat(errors.fileno()).st_size>2_000_000: raise ValueError('Plugin output exceeds 2 MB.')
             output.seek(0)
             value = json.loads(output.read(2_000_001))
