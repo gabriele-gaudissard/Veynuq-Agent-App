@@ -380,6 +380,29 @@ class UpdateTests(unittest.TestCase):
         return blob, sign_manifest({"version": "4.0.0", "sequence": 1, "commit": "a" * 40, "archive_sha256": hashlib.sha256(blob).hexdigest(),
                       "files": {n: hashlib.sha256(b).hexdigest() for n, b in files.items()}}, self.signing_key)
 
+    def test_public_api_quota_fallback_keeps_signed_update_checks(self):
+        blob, manifest = self.bundle()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)/'app';root.mkdir()
+            store = Store(Path(directory)/'profile')
+            updater = Updater(root, store)
+            with patch.object(updater, '_installation', return_value={'commit':'b'*40,'sequence':0}), \
+                 patch('veyq.updater.public_request', side_effect=[RuntimeError('HTTP 403: API rate limit'), {'text':json.dumps(manifest)}, {'data':blob}]) as request:
+                self.assertTrue(updater.check_and_stage()['ready'])
+            self.assertEqual(request.call_args_list[1].args[0], 'https://github.com/gabriele-gaudissard/Veynuq-Agent-App/releases/latest/download/veyq-update.json')
+            self.assertIn('/releases/download/build-'+manifest['commit']+'/veyq-update.zip',request.call_args_list[2].args[0])
+            updater.pending.unlink()
+            damaged={**manifest,'sequence':99}
+            with patch.object(updater, '_installation', return_value={'commit':'b'*40,'sequence':0}), \
+                 patch('veyq.updater.public_request', side_effect=[RuntimeError('HTTP 429: API rate limit'), {'text':json.dumps(damaged)}]) as request:
+                with self.assertRaises(Exception):updater.check_and_stage()
+            self.assertEqual(request.call_count,2)
+            self.assertFalse(updater.pending.exists())
+            with patch.object(updater, '_installation', return_value={'commit':'b'*40,'sequence':0}), \
+                 patch('veyq.updater.public_request', side_effect=RuntimeError('HTTP 500: temporary failure')) as request:
+                with self.assertRaises(RuntimeError):updater.check_and_stage()
+            self.assertEqual(request.call_count,1)
+
     def test_signatures_reject_unsigned_tampered_and_wrong_key(self):
         blob, manifest = self.bundle()
         verify_manifest(manifest)

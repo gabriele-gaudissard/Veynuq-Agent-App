@@ -60,6 +60,30 @@ class Completion45(unittest.TestCase):
    self.enterContext(patch.object(image_setup,name+'_SIZE',(folder/file).stat().st_size));self.enterContext(patch.object(image_setup,name+'_SHA',hashlib.sha256((folder/file).read_bytes()).hexdigest()))
   return folder,binary
 
+ def test_first_install_prepares_managed_default_and_retains_selected_engine(self):
+  self.assertEqual(self.store.data['settings']['image_provider'],'managed')
+  with patch.object(image_setup,'prepare',return_value={'ready':True}) as download:
+   result=image_setup.prepare_for_install(self.store)
+  self.assertTrue(result['ready']);self.assertFalse(result['reused']);download.assert_called_once()
+  self.store.data['settings']['image_provider']='compatible'
+  with patch.object(image_setup,'prepare',side_effect=AssertionError('Unwanted download')):
+   self.assertTrue(image_setup.prepare_for_install(self.store)['skipped'])
+  self.assertEqual(self.store.data['settings']['image_provider'],'compatible')
+
+ def test_image_installer_reuses_verified_files_without_network(self):
+  folder,binary=self.image_fixture()
+  for name in ('MODEL-CARD.md','MODEL-LICENSE.txt','ENGINE-LICENSE.txt'):(folder/name).write_text('fixture notice')
+  with patch.object(image_setup,'prepare',side_effect=AssertionError('Unwanted download')):
+   result=image_setup.prepare_for_install(self.store)
+  self.assertTrue(result['ready']);self.assertTrue(result['reused'])
+  self.assertEqual((binary/'lib.dll').read_bytes(),b'fixture dll')
+
+ def test_image_installer_repairs_corrupt_files_and_reports_download_failure(self):
+  folder,binary=self.image_fixture();(binary/'lib.dll').write_bytes(b'changed')
+  with patch.object(image_setup,'prepare',side_effect=RuntimeError('controlled download failure')) as download:
+   with self.assertRaisesRegex(RuntimeError,'controlled download failure'):image_setup.prepare_for_install(self.store)
+  download.assert_called_once();self.assertEqual(self.store.data['settings']['image_provider'],'managed')
+
  def test_managed_integrity_verifies_actual_executable_model_and_archive(self):
   folder,binary=self.image_fixture();executable,model=image_setup.verify(self.store.root);self.assertEqual(executable,binary/'sd-cli.exe');self.assertTrue(image_setup.ready(self.store.root))
   (binary/'lib.dll').write_bytes(b'tampered')

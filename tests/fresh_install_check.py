@@ -26,10 +26,13 @@ def main():
         probe=subprocess.check_output([runtime,'-c','import webview,mcp,jsonschema,faster_whisper,playwright,pywinauto,jedi;from veyq.tools import TOOLS,ToolRunner;from veyq import plugin_oauth,code_intelligence;names={t["function"]["name"] for t in TOOLS};assert {"computer_action","generate_image","plugin_extension","code_intelligence"} <= names;assert all(hasattr(ToolRunner,"tool_"+name) for name in names);print("All built-in adapters import successfully")'],cwd=app,env=env,text=True)
         state=json.loads((base/'profile/state.json').read_text(encoding='utf-8'))
         assert state['settings']['lang']=='en' and state['settings']['disabled_tools']==[]
+        assert state['settings']['image_provider']=='managed'
+        reused=subprocess.check_output([runtime,str(app/'app.py'),'--prepare-images'],cwd=app,env=env,text=True,timeout=120)
+        assert json.loads(reused.strip().splitlines()[-1])['reused'] is True
         assert (base/'shortcuts/Veynuq.lnk').is_file()
         again=subprocess.check_output(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(app/'PythonSetup.ps1')],cwd=app,text=True)
         assert 'Skipping Python installation' in again
-        print(probe+again,flush=True)
+        print(probe+again+reused,flush=True)
         # python.org installations remain registered after this gate; the CI
         # runner is ephemeral and is discarded after the job.
 

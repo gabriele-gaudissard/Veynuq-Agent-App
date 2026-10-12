@@ -256,8 +256,8 @@ class Autonomy(unittest.TestCase):
         results=[json.loads(m['content']) for m in self.session['history'] if m['role']=='tool']
         self.assertEqual(len(results),4);self.assertTrue(all(r['ok'] for r in results))
 
-    def test_image_engine_limits_and_disabled_default(self):
-        with self.assertRaises(RuntimeError):generate(self.store.data['settings'],'','prompt',256,256,self.cancel)
+    def test_image_engine_limits_and_explicitly_disabled_provider(self):
+        with self.assertRaises(RuntimeError):generate({**self.store.data['settings'],'image_provider':'disabled'},'','prompt',256,256,self.cancel)
         settings={**self.store.data['settings'],'image_provider':'local_sd'}
         for width in [1,257,2048,True]:
             with self.assertRaises(ValueError):generate(settings,'','prompt',width,256,self.cancel)
