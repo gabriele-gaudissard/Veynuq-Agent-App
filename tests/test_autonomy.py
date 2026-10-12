@@ -310,12 +310,12 @@ class Autonomy(unittest.TestCase):
 
     def test_image_destination_changed_during_generation_is_preserved(self):
         target=self.workspace/'proof.png';target.write_bytes(b'original')
-        def change(*args):target.write_bytes(b'changed externally');return png(),256,256
+        def change(*args, **kwargs):target.write_bytes(b'changed externally');return png(),256,256
         with patch('veyq.image_generation.generate',side_effect=change),self.assertRaises(PermissionError):self.runner.tool_generate_image('test','proof.png',256,256)
         self.assertEqual(target.read_bytes(),b'changed externally');self.assertNotIn('artifacts',self.session)
 
     def test_cancelled_image_does_not_write_host_file(self):
-        def cancel(*args):self.cancel.set();return png(),256,256
+        def cancel(*args, **kwargs):self.cancel.set();return png(),256,256
         with patch('veyq.image_generation.generate',side_effect=cancel),self.assertRaises(RuntimeError):self.runner.tool_generate_image('test','proof.png',256,256)
         self.assertFalse((self.workspace/'proof.png').exists())
 

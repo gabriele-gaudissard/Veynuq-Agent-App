@@ -51,7 +51,7 @@ class PluginTests(unittest.TestCase):
     def install(self, config=None, manifest=None):
         source=self.root/'source';source.mkdir(exist_ok=True)
         (source/'.claude-plugin').mkdir(exist_ok=True)
-        (source/'.claude-plugin/plugin.json').write_text(json.dumps(manifest or {'name':'controlled-plugin','version':'1.0','hooks':'./hooks/hooks.json'}))
+        (source/'.claude-plugin/plugin.json').write_text(json.dumps(manifest or {'name':'controlled-plugin','version':'1.0'}))
         (source/'skills/check').mkdir(parents=True,exist_ok=True)
         (source/'skills/check/SKILL.md').write_text('Read and verify the requested project. Never send secrets. !`no-shell-on-load`')
         (source/'commands').mkdir(exist_ok=True);(source/'commands/review.md').write_text('Review the actual diff.')
@@ -62,7 +62,7 @@ class PluginTests(unittest.TestCase):
 
     def test_claude_skills_commands_import_enabled_no_hooks(self):
         row=self.install();self.assertTrue(row['enabled']);self.assertEqual(set(row['skills']),{'check','review'})
-        self.assertIn('hooks',row['unsupported']);self.assertFalse((self.manager.folder(row)/'.env').exists())
+        self.assertEqual(row['hooks'],{});self.assertFalse((self.manager.folder(row)/'.env').exists())
         self.assertTrue(self.manager.skill(row['id'],'check')['untrusted'])
         self.assertIn('no-shell-on-load',self.manager.skill(row['id'],'check')['content'])
         self.assertEqual(len(Plugins(Store(self.store.root)).catalog()),1)

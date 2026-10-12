@@ -17,6 +17,7 @@ const settings={desktop_scope:"all",background_schedules:false,image_provider:"d
 w.matchMedia=()=>({matches:true});w.confirm=()=>true;w.prompt=()=>"Renamed";
 Object.defineProperty(w.navigator,"clipboard",{value:{writeText:async text=>calls.push(["clipboard",text])}});
 const api={
+ image_engine_status:async()=>({state:'idle',ready:true}),
  get_plugins:async()=>({plugins:[{id:'plugin-one',name:'<img src=x onerror=alert(1)>',description:'<script>unsafe</script>',enabled:true,version:'1',skills:{review:'commands/review.md'},servers:{local:{command:'python',args:['server.py']}},unsupported:['hooks'],has_token:false}]}),
  set_plugin_enabled:async(...args)=>calls.push(['pluginEnabled',...args]),
  save_plugin_token:async(...args)=>calls.push(['pluginToken',...args]),
@@ -162,6 +163,8 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,30));
  w.showQuestion({id:"q1",question:"Which project?",options:["One","Two"]});document.querySelector("#questionOptions button").click();document.getElementById("submitAnswer").click();await tick();
  assert.deepEqual(calls.find(c=>c[0]==="answer"),["answer","q1","One"]);
  document.getElementById("language").value="it";document.getElementById("language").dispatchEvent(new w.Event("change"));await tick();assert.equal(settings.lang,"it");assert.equal(document.querySelector(".session span").textContent,"Nuova attività");
+ document.getElementById('imageInfo').click();await tick();assert.match(document.getElementById('imageHelpContent').textContent,/4,3 GB/);assert.match(document.getElementById('imageHelpContent').textContent,/Non richiede account/);assert.equal(document.getElementById('imageHelpContent').querySelectorAll('p').length,8);w.close('imageHelpModal');
+ document.getElementById('imageProvider').value='managed';document.getElementById('imageProvider').dispatchEvent(new w.Event('change'));assert.ok(document.getElementById('imageEndpoint').disabled);assert.ok(document.getElementById('imageToken').disabled);
  const dictionaries=w.VeyqI18N.dictionaries;
  for(const [key,value] of Object.entries(dictionaries.strings))for(const lang of ["it","es","fr"])assert.ok(value[lang],key+":"+lang);
  assert.equal(new Set([...document.querySelectorAll("[id]")].map(e=>e.id)).size,document.querySelectorAll("[id]").length);
