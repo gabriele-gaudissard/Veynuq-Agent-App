@@ -33,10 +33,11 @@ const api={
  review_changes:async()=>({diff:'-old\n+<img src=x onerror=alert(1)>\n'}),
  resume_task:async id=>calls.push(['resume',id]),save_automation:async(...args)=>calls.push(['schedule',...args]),
  toggle_automation:async id=>calls.push(['toggleSchedule',id]),remove_automation:async id=>calls.push(['removeSchedule',id]),
- get_tool_catalog:async()=>({total:44,groups:[{name:'Mouse and keyboard',description:'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.',count:1,tools:[{name:'computer_action',enabled:!disabledTools.has('computer_action')}]}]}),
+ get_tool_catalog:async()=>({total:46,groups:[{name:'Mouse and keyboard',description:'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.',count:1,tools:[{name:'computer_action',enabled:!disabledTools.has('computer_action')}]}]}),
  delete_session:async id=>{calls.push(["delete",id]);const i=chatRows.findIndex(s=>s.id===id);if(i>=0)chatRows.splice(i,1);},
  create_session:async()=>{calls.push(["create"]);const id="created";chatRows.push({id,title:"New activity",untitled:true,project_id:""});return id;},
  get_settings:async()=>({...settings}),get_sessions:async()=>chatRows,get_projects:async()=>[{id:"project-one",name:"Project one"}],
+ save_settings:async values=>{if(values.permission==='full'&&values.confirm_full!==true)throw new Error('Explicit full-access confirmation required');calls.push(['saveSettings',values]);Object.assign(settings,values);},
  get_session:async id=>({id,workspace:"C:\\Demo",history:id==="other"?[{role:"user",content:"Other conversation"}]:[],plan:[]}),get_events:async()=>eventState,
  assign_project:async(id,project)=>{calls.push(["assign",id,project]);chatRows.find(s=>s.id===id).project_id=project;},
  get_model_catalog:async()=>({models:[{name:"sample:7b",weight:"Light",download_gb:4,uses:"General writing, analysis and lightweight tool tasks"}],hardware:{ram_gb:16,disk_free_gb:100}}),
@@ -82,6 +83,24 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,30));
  assert.equal(document.getElementById('responseTokens').value,'4096');
  assert.equal(document.getElementById('imageToken').value,'');
  assert.equal(document.getElementById('backgroundSchedules').checked,false);
+ // Persisted full access is reflected on every open; changing modes clears consent.
+ assert.equal(document.getElementById('fullConsent').checked,false);
+ settings.permission='full';await w.showSettings();await tick();
+ assert.equal(document.getElementById('fullConsent').checked,true);
+ await w.saveSettings();await w.showSettings();await tick();
+ assert.equal(document.getElementById('fullConsent').checked,true);
+ assert.equal(calls.filter(c=>c[0]==='saveSettings').at(-1)[1].confirm_full,true);
+ document.getElementById('permission').value='always';document.getElementById('permission').dispatchEvent(new w.Event('change'));
+ assert.equal(document.getElementById('fullConsent').checked,false);
+ await w.saveSettings();await w.showSettings();assert.equal(document.getElementById('fullConsent').checked,false);
+ assert.equal(document.getElementById('fullConfirm').style.display,'none');
+ document.getElementById('permission').value='full';document.getElementById('permission').dispatchEvent(new w.Event('change'));
+ assert.equal(document.getElementById('fullConsent').checked,false);
+ await assert.rejects(w.saveSettings(),/confirmation required/);assert.equal(settings.permission,'always');
+ document.getElementById('fullConsent').checked=true;await w.saveSettings();await w.showSettings();
+ assert.equal(document.getElementById('fullConsent').checked,true);
+ document.getElementById('permission').value='auto';document.getElementById('permission').dispatchEvent(new w.Event('change'));
+ await w.saveSettings();await w.showSettings();assert.equal(document.getElementById('fullConsent').checked,false);
  await w.showTaskCenter();await tick();
  assert.equal(document.getElementById('resumeTask').disabled,false);
  assert.match(document.getElementById('taskProgress').textContent,/<img/);

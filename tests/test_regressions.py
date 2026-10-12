@@ -48,6 +48,18 @@ class Regressions(unittest.TestCase):
             self.assertTrue(action_intent(text),text)
         for text in ['Come posso impostare la tastiera?','Puoi spiegarmi come cambiare il layout?','Do not change my settings','How do I create a file?']:
             self.assertFalse(action_intent(text),text)
+    def test_generic_image_capability_question_does_not_force_generation(self):
+        for text in ['puoi creare immagini?', 'Sai generare immagini?', 'Can you create images?', 'Are you able to generate images?']:
+            self.assertFalse(action_intent(text), text)
+        for text in ['Puoi creare un’immagine di un cane?', 'Can you create an image of a dog?', 'Crea immagini di un cane', 'Puoi creare immagini? Fallo tu: disegna un cane']:
+            self.assertTrue(action_intent(text), text)
+        with patch.object(ModelClient, 'chat', return_value={'role':'assistant','content':'Yes, a local image engine is available.'}) as chat:
+            self.agent.start(self.sid, 'puoi creare immagini?'); self.wait()
+        self.assertEqual(chat.call_count, 1)
+        self.assertEqual(self.agent.state, 'completed')
+        self.assertEqual(list(self.workspace.iterdir()), [])
+        self.assertEqual(self.api.get_session(self.sid)['history'][-1]['content'], 'Yes, a local image engine is available.')
+
     def test_instruction_only_reply_is_retried_until_actual_action(self):
         messages=[{'role':'assistant','content':'You can create the file yourself.'}, {'role':'assistant','content':'','tool_calls':[{'id':'a','function':{'name':'write_file','arguments':{'path':'proof.txt','content':'actual'}}}]}, {'role':'assistant','content':'','tool_calls':[{'id':'verify','function':{'name':'read_file','arguments':{'path':'proof.txt'}}}]}, {'role':'assistant','content':'Done.'}]
         with patch.object(ModelClient,'chat',side_effect=messages) as chat:

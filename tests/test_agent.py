@@ -210,6 +210,27 @@ class AgentTests(unittest.TestCase):
         api.save_settings({"permission": "full", "confirm_full": True})
         self.assertEqual(api.get_settings()["permission"], "full")
 
+    def test_confirmed_full_access_survives_reload_and_can_be_reduced(self):
+        DesktopAPI(self.store).save_settings({'permission':'full','confirm_full':True})
+        reopened = Store(self.store.root)
+        api = DesktopAPI(reopened)
+        self.assertEqual(api.get_settings()['permission'], 'full')
+        approvals = []
+        runner = ToolRunner(reopened, {**api.get_settings(), 'workspace':str(self.workspace)},
+                            'consent-reload', self.cancel, lambda *args: None,
+                            lambda request: approvals.append(request) or False, self.root/'app', {})
+        target = self.root/'controlled-outside-project.txt'
+        result = runner.execute('write_file', {'path':str(target),'content':'verified after reload'})
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(target.read_text(encoding='utf-8'), 'verified after reload')
+        self.assertEqual(approvals, [])
+        api.save_settings({'permission':'always'})
+        reduced = DesktopAPI(Store(self.store.root))
+        self.assertEqual(reduced.get_settings()['permission'], 'always')
+        with self.assertRaises(ValueError):
+            reduced.save_settings({'permission':'full','confirm_full':False})
+        self.assertEqual(Store(self.store.root).data['settings']['permission'], 'always')
+
     def test_bridge_does_not_expose_credentials(self):
         self.store.vault.set("github", "test-hidden-token")
         api = DesktopAPI(self.store)
