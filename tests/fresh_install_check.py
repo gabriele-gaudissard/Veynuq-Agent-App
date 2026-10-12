@@ -23,7 +23,7 @@ def main():
         if run.returncode: raise RuntimeError('Fresh installation failed.')
         runtime=json.loads((app/'runtime.json').read_text(encoding='utf-8'))['python']
         assert Path(runtime).resolve().is_relative_to(app.resolve())
-        probe=subprocess.check_output([runtime,'-c','import webview,mcp,jsonschema,faster_whisper,playwright,pywinauto;from veyq.tools import TOOLS;assert len(TOOLS)==44;print("All built-in adapters import successfully")'],cwd=app,env=env,text=True)
+        probe=subprocess.check_output([runtime,'-c','import webview,mcp,jsonschema,faster_whisper,playwright,pywinauto,jedi;from veyq.tools import TOOLS,ToolRunner;from veyq import plugin_oauth,code_intelligence;names={t["function"]["name"] for t in TOOLS};assert {"computer_action","generate_image","plugin_extension","code_intelligence"} <= names;assert all(hasattr(ToolRunner,"tool_"+name) for name in names);print("All built-in adapters import successfully")'],cwd=app,env=env,text=True)
         state=json.loads((base/'profile/state.json').read_text(encoding='utf-8'))
         assert state['settings']['lang']=='en' and state['settings']['disabled_tools']==[]
         assert (base/'shortcuts/Veynuq.lnk').is_file()
