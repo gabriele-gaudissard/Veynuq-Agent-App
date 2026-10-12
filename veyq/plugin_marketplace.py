@@ -88,7 +88,7 @@ def install(store, value, revision, name, reviewed_source):
         raise ValueError('Reviewed source does not match the marketplace manifest.')
     blob=public_request(f'https://codeload.github.com/{repo}/zip/{commit}',limit=25_000_000,timeout=60)['data']
     with tempfile.TemporaryDirectory(prefix='veynuq-marketplace-') as folder:
-        root=Path(folder);unpacked=root/'plugin';unpacked.mkdir()
+        root=Path(folder).resolve();unpacked=root/'plugin';unpacked.mkdir()
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
             count=total=0
             seen=set()
