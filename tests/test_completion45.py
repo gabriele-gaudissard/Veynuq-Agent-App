@@ -86,6 +86,24 @@ class Completion45(unittest.TestCase):
    with self.assertRaises(ValueError):generate({'image_provider':'managed'},'','prompt',1024,512,threading.Event(),self.store.root)
    launch.assert_not_called()
 
+ def test_managed_stop_preserves_cancellation_when_windows_cleanup_is_delayed(self):
+  from veyq.image_generation import generate
+  directory=tempfile.TemporaryDirectory(dir=self.root);attempts=[];cleanup=directory.cleanup
+  (Path(directory.name)/'prompt.txt').write_text('synthetic test prompt')
+  def delayed():
+   attempts.append(1)
+   if len(attempts)==1:raise PermissionError('Synthetic Windows cwd handle still closing')
+   cleanup()
+  directory.cleanup=delayed
+  class Process:
+   def __init__(self):self.stdin=io.StringIO();self.stdout=io.StringIO('{}\n')
+   def poll(self):return 0
+   def wait(self,**kw):return 0
+  cancel=threading.Event();cancel.set()
+  with patch('tempfile.TemporaryDirectory',return_value=directory),patch('veyq.image_generation.subprocess.Popen',return_value=Process()),patch('veyq.image_generation.time.sleep'):
+   with self.assertRaisesRegex(RuntimeError,'stopped'):generate({'image_provider':'managed'},'','synthetic prompt',512,512,cancel,self.store.root)
+  self.assertEqual(len(attempts),2);self.assertFalse(Path(directory.name).exists())
+
  def test_static_python_analysis_does_not_execute_source(self):
   file=self.workspace/'sample.py';file.write_text('raise RuntimeError("must not execute")\ndef greet(name):\n    return name\ngreet("world")\n')
   symbols=self.runner.execute('code_intelligence',{'path':'sample.py','action':'symbols'});self.assertTrue(symbols['ok'],symbols);self.assertIn('greet',[i['name'] for i in symbols['result']['items']])
