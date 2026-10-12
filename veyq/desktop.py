@@ -771,7 +771,8 @@ class DesktopAPI:
             try:
                 from .image_generation import generate
                 import base64
-                pixels,width,height=generate(settings,self._store.vault.get('image'),'A small red robot standing in a green garden, watercolor illustration',256,256,self._image_cancel,data_root=self._store.root)
+                size=256 if settings['image_provider']=='managed' else 1024
+                pixels,width,height=generate(settings,self._store.vault.get('image'),'A small red robot standing in a green garden, watercolor illustration',size,size,self._image_cancel,data_root=self._store.root)
                 if self._image_cancel.is_set(): raise RuntimeError('Image generation stopped.')
                 with self._image_status_lock: self._image_status={'state':'tested','width':width,'height':height,'data_url':'data:image/png;base64,'+base64.b64encode(pixels).decode('ascii')}
             except Exception as error:

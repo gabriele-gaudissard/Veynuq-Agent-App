@@ -352,7 +352,10 @@ class ToolRunner:
         from .windows_sandbox import open_desktop
         return open_desktop(self.workspace,self.store.root,self.cancel)
 
-    def tool_generate_image(self,prompt,path,width=512,height=512):
+    def tool_generate_image(self,prompt,path,width=None,height=None):
+        default=512 if self.settings.get('image_provider')=='managed' else 1024
+        width=default if width is None else width
+        height=default if height is None else height
         target=self.path(path)
         if target.suffix.lower()!='.png': raise ValueError('Generated images must use a .png filename.')
         if target.exists() and target.stat().st_size>5_000_000: raise ValueError('Existing image exceeds the backup limit; choose a new filename.')
