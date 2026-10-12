@@ -925,7 +925,7 @@ async function showSettings() {
   $("githubToken").placeholder = settings.has_github_token
     ? ui("Saved in vault; leave blank to keep it")
     : ui("Token with access to the repositories you need");
-  $("fullConsent").checked = false;
+  $("fullConsent").checked = settings.permission === "full";
   $("fullConfirm").style.display =
     settings.permission === "full" ? "flex" : "none";
   $("dataDir").textContent = settings.data_dir;

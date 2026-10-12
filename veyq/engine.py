@@ -39,6 +39,10 @@ def backend_interruption(detail):
 
 def action_intent(text):
     text = text.strip().lower()
+    # A generic capability question supplies no image to create. Specific
+    # requests such as "Can you create an image of a dog?" still require action.
+    if re.fullmatch(r"(?:puoi|sai|sei in grado di|can you|are you able to)\s+(?:creare|generare|create|generate)\s+(?:immagini|images)\s*[?!.]*", text):
+        return False
     explicit = bool(re.search(r"\b(fallo tu|fallo per me|esegui tu|eseguilo|non .*istruzioni|do it for me|do it yourself)\b", text))
     action = re.search(r"\b(imposta\w*|modifica\w*|cambia\w*|scarica\w*|configura\w*|crea\w*|scrivi\w*|salva\w*|esegui\w*|installa\w*|correggi\w*|aggiorna\w*|aggiungi\w*|elimina\w*|sposta\w*|rinomina\w*|set|change|download|configure|create|write|save|run|install|fix|update|add|delete|move|rename|clone|implement|build)\b", text)
     explanation = re.search(r"\b(spieg\w*|explain|istruzioni|instructions|tutorial)\b", text)
