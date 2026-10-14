@@ -34,7 +34,10 @@ class TransientModelError(RuntimeError):
 def backend_interruption(detail):
     return any(signal in detail.lower() for signal in (
         'error reading llama-server response', 'connection reset',
-        'connection closed', 'temporarily unavailable', 'health resp:'))
+        'connection closed', 'temporarily unavailable', 'health resp:',
+        # Windows names the failing socket operation even when its error
+        # text is translated (for example an Italian tokenize reset).
+        'wsarecv:'))
 
 
 def action_intent(text):

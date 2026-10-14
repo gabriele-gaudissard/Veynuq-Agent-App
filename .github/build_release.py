@@ -33,13 +33,13 @@ def build(destination, commit=None):
     files = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in (ROOT / "veyq").glob("*.py")}
     for name in (DISTRIBUTION_ROOT_FILES | DISTRIBUTION_ASSET_FILES) - {"build.json"}:
         files[name] = (ROOT / name).read_bytes()
-    files["build.json"] = json.dumps({"version": "4.5.2", "commit": commit, "sequence": sequence}, indent=2).encode()
+    files["build.json"] = json.dumps({"version": "4.5.3", "commit": commit, "sequence": sequence}, indent=2).encode()
     validate_distribution_files(files)
     archive = destination / "veyq-update.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
         for name, content in sorted(files.items()):
             z.writestr(name, content)
-    manifest = {"version": "4.5.2", "commit": commit, "sequence": sequence, "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+    manifest = {"version": "4.5.3", "commit": commit, "sequence": sequence, "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
                 "files": {n: hashlib.sha256(b).hexdigest() for n, b in files.items()}}
     manifest = sign_manifest(manifest, signing_key)
     (destination / "veyq-update.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
