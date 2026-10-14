@@ -55,6 +55,21 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].with_suffix("").read_text(), "value = 1\n")
 
+    def test_read_file_handles_bom_text_and_rejects_executable_without_changes(self):
+        for encoding in ('utf-8-sig','utf-16'):
+            with self.subTest(encoding=encoding):
+                path=self.workspace/'text.txt'
+                path.write_bytes('caffè\nsecond line'.encode(encoding))
+                result=self.runner.execute('read_file',{'path':'text.txt'})
+                self.assertTrue(result['ok']);self.assertEqual(result['result']['total_lines'],2)
+                self.assertEqual(result['result']['content'],'1: caffè\n2: second line')
+        for name,data in (('program.exe',b'MZ\x90\x00'),('binary.txt',b'plain\x00binary'),('unknown.txt',b'\x90')):
+            with self.subTest(name=name):
+                path=self.workspace/name;path.write_bytes(data)
+                result=self.runner.execute('read_file',{'path':name})
+                self.assertFalse(result['ok']);self.assertIn('Binary',result['error'])
+                self.assertNotIn('codec',result['error']);self.assertEqual(path.read_bytes(),data)
+
     def test_ambiguous_edit_does_not_mutate(self):
         (self.workspace / "a.txt").write_text("same same")
         self.assertFalse(self.runner.execute("edit_file", {"path": "a.txt", "old": "same", "new": "x"})["ok"])

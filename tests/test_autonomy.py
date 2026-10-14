@@ -201,6 +201,28 @@ class Autonomy(unittest.TestCase):
                     failed.close.assert_called_once()
                 finally:client.close()
 
+    def test_local_final_response_is_consumed_before_connection_closes(self):
+        client=ModelClient(self.store.data['settings'],'',self.cancel,lambda *a:None)
+        self.addCleanup(client.close);client.metadata={'capabilities':['completion','tools']}
+        finished=[]
+        def lines():
+            yield b'{"message":{"content":"complete"},"done":true}'
+            finished.append(True)
+        response=Mock(status_code=200);response.iter_lines.return_value=lines()
+        with patch.object(client.session,'post',return_value=response):
+            self.assertEqual(client.chat([])['content'],'complete')
+        self.assertEqual(finished,[True]);response.close.assert_called_once()
+
+    def test_local_trailing_tool_data_is_not_accepted_after_final_response(self):
+        client=ModelClient(self.store.data['settings'],'',self.cancel,lambda *a:None)
+        self.addCleanup(client.close);client.metadata={'capabilities':['completion','tools']}
+        response=Mock(status_code=200)
+        response.iter_lines.return_value=iter([b'{"message":{"content":"complete"},"done":true}',
+            b'{"message":{"tool_calls":[{"function":{"name":"delete_file","arguments":{"path":"a.txt"}}}]}}'])
+        with patch.object(client.session,'post',return_value=response) as post,self.assertRaisesRegex(RuntimeError,'Unexpected data'):
+            client.chat([])
+        post.assert_called_once();response.close.assert_called_once()
+
     def test_persistent_local_health_failure_has_bounded_retries(self):
         client=ModelClient(self.store.data['settings'],'',self.cancel,lambda *a:None);self.addCleanup(client.close)
         client.metadata={'capabilities':['completion','tools']}
