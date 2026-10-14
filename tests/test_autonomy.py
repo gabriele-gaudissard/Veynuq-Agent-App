@@ -182,6 +182,25 @@ class Autonomy(unittest.TestCase):
             client.chat([])
         self.assertEqual(post.call_count,1)
 
+    def test_windows_tokenize_reset_retries_independently_of_os_language(self):
+        for detail in ('Connessione in corso interrotta forzatamente dall\u0027host remoto.',
+                       'An existing connection was forcibly closed by the remote host.'):
+            with self.subTest(detail=detail):
+                client=ModelClient(self.store.data['settings'],'',self.cancel,lambda *a:None)
+                client.metadata={'capabilities':['completion','tools']}
+                failed=Mock(status_code=500,text=json.dumps({'error':'Post "http://127.0.0.1:56134/tokenize": read tcp 127.0.0.1:62348->127.0.0.1:56134: wsarecv: '+detail}))
+                success=Mock(status_code=200)
+                success.iter_lines.return_value=iter([b'{"message":{"content":"continued"},"done":true}'])
+                messages=[{'role':'tool','tool_call_id':'already-done','content':'file was written'}]
+                try:
+                    with patch.object(client.session,'post',side_effect=[failed,success]) as post,patch.object(self.cancel,'wait',return_value=False):
+                        self.assertEqual(client.chat(messages)['content'],'continued')
+                    self.assertEqual(post.call_count,2)
+                    for call in post.call_args_list:
+                        self.assertEqual(call.kwargs['json']['messages'],messages)
+                    failed.close.assert_called_once()
+                finally:client.close()
+
     def test_persistent_local_health_failure_has_bounded_retries(self):
         client=ModelClient(self.store.data['settings'],'',self.cancel,lambda *a:None);self.addCleanup(client.close)
         client.metadata={'capabilities':['completion','tools']}
