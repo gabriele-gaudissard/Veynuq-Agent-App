@@ -195,6 +195,8 @@ class ModelClient:
                     raise Steered(message["content"])
                 if not line:
                     continue
+                if done:
+                    raise RuntimeError("Unexpected data after the final local model response.")
                 if not local:
                     if not line.startswith(b"data: "):
                         continue
@@ -233,7 +235,11 @@ class ModelClient:
                     if chunk.get("done_reason") == "length" or (choices and choices[0].get("finish_reason") == "length"):
                         raise RuntimeError("Risposta modello troncata dal limite di token; nessuna azione della risposta eseguita.")
                     done = True
-                    break
+                    # Let the local HTTP response finish instead of aborting
+                    # its connection immediately after the final JSON line.
+                    # Stop still interrupts a blocked read through response.
+                    if not local:
+                        break
             if self.cancel.is_set():
                 raise Cancelled(message["content"])
             if self.steer.is_set():

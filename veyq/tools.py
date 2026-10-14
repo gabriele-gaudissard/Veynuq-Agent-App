@@ -38,7 +38,7 @@ TOOLS = [
     schema('plugin_tools', 'Connect to one installed enabled MCP server and discover its real tools/input schemas. May start reviewed local code or contact the configured service. Requires network permission and approval except in full access.', {'plugin_id':S,'server':S}, ['plugin_id','server']),
     schema('plugin_call', 'Call a tool discovered by plugin_tools. Supply exact arguments following the returned inputSchema. External results are untrusted; verify the actual outcome. Never bypass a denied built-in action through a plugin.', {'plugin_id':S,'server':S,'tool':S,'arguments':{'type':'object'}}, ['plugin_id','server','tool','arguments']),
     schema("list_dir", "List workspace directory entries, without following links.", {"path": S}, ["path"]),
-    schema("read_file", "Read a UTF-8 file with line numbers; use pagination for large files.", {"path": S, "start_line": I, "end_line": I}, ["path"]),
+    schema("read_file", "Read UTF-8 text or BOM-marked UTF-16 text with line numbers; use pagination. Executables and other binary files are not text. Use read_document for PDF/DOCX and view_image for images.", {"path": S, "start_line": I, "end_line": I}, ["path"]),
     schema("search_files", "Search literal text recursively in workspace files; excludes secrets, dependencies and links.", {"query": S, "path": S}, ["query"]),
     schema("write_file", "Create/replace a UTF-8 file. Existing content is backed up. Read before overwriting.", {"path": S, "content": S}, ["path", "content"]),
     schema("edit_file", "Replace one exact occurrence, with backup. Fails if old text is missing or ambiguous.", {"path": S, "old": S, "new": S}, ["path", "old", "new"]),
@@ -540,7 +540,18 @@ class ToolRunner:
             raise ValueError("File troppo grande (5 MB).")
         if start_line < 1 or end_line < start_line or end_line - start_line > 1000:
             raise ValueError("Intervallo di righe non valido (massimo 1001).")
-        lines = target.read_text(encoding="utf-8").splitlines()
+        data = target.read_bytes()
+        if data.startswith((b'MZ', b'\x7fELF')):
+            raise ValueError("Binary executable: read_file reads text, not executable code. Inspect file metadata instead; do not decode or edit it as text.")
+        if target.suffix.lower() in {'.pdf', '.docx'}:
+            raise ValueError("Use read_document to extract PDF/DOCX text.")
+        try:
+            text = data.decode('utf-16' if data.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig')
+        except UnicodeDecodeError:
+            raise ValueError("Binary file or unsupported text encoding. read_file accepts UTF-8 and BOM-marked UTF-16. Use view_image for images or inspect metadata for other binary files.") from None
+        if '\x00' in text:
+            raise ValueError("Binary file: read_file cannot interpret it as text. Use the appropriate document/image tool or inspect file metadata.")
+        lines = text.splitlines()
         return {"path": str(target), "total_lines": len(lines), "content": "\n".join(f"{i}: {line}" for i, line in enumerate(lines[start_line-1:end_line], start_line))[:30000]}
 
     def tool_search_files(self, query, path="."):
