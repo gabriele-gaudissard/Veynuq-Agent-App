@@ -17,6 +17,8 @@ const settings={desktop_scope:"all",background_schedules:false,image_provider:"d
 w.matchMedia=()=>({matches:true});w.confirm=()=>true;w.prompt=()=>"Renamed";
 Object.defineProperty(w.navigator,"clipboard",{value:{writeText:async text=>calls.push(["clipboard",text])}});
 const api={
+ preview_optional_tools:async scope=>{calls.push(['previewOptional',scope]);return {scope,count:1,digest:'reviewed-'+scope,items:[{kind:'plugin',id:'optional',name:'<img src=x onerror=alert(1)>',version:'1',installed_by:scope==='agent'?'agent':'user'}]};},
+ clear_optional_tools:async(...args)=>{calls.push(['clearOptional',...args]);return {ok:true,removed_count:1,errors:[]};},
  image_engine_status:async()=>({state:'idle',ready:true}),
  get_plugins:async()=>({plugins:[{id:'plugin-one',name:'<img src=x onerror=alert(1)>',description:'<script>unsafe</script>',enabled:true,version:'1',skills:{review:'commands/review.md'},servers:{local:{command:'python',args:['server.py']}},unsupported:['hooks'],has_token:false}]}),
  set_plugin_enabled:async(...args)=>calls.push(['pluginEnabled',...args]),
@@ -33,7 +35,7 @@ const api={
  review_changes:async()=>({diff:'-old\n+<img src=x onerror=alert(1)>\n'}),
  resume_task:async id=>calls.push(['resume',id]),save_automation:async(...args)=>calls.push(['schedule',...args]),
  toggle_automation:async id=>calls.push(['toggleSchedule',id]),remove_automation:async id=>calls.push(['removeSchedule',id]),
- get_tool_catalog:async()=>({total:46,groups:[{name:'Mouse and keyboard',description:'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.',count:1,tools:[{name:'computer_action',enabled:!disabledTools.has('computer_action')}]}]}),
+ get_tool_catalog:async()=>({total:49,groups:[{name:'Mouse and keyboard',description:'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.',count:1,tools:[{name:'computer_action',enabled:!disabledTools.has('computer_action')}]}]}),
  delete_session:async id=>{calls.push(["delete",id]);const i=chatRows.findIndex(s=>s.id===id);if(i>=0)chatRows.splice(i,1);},
  create_session:async()=>{calls.push(["create"]);const id="created";chatRows.push({id,title:"New activity",untitled:true,project_id:""});return id;},
  get_settings:async()=>({...settings}),get_sessions:async()=>chatRows,get_projects:async()=>[{id:"project-one",name:"Project one"}],
@@ -142,6 +144,12 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,30));
  const toolToggle=document.querySelector('#toolCatalog input');assert.equal(toolToggle.checked,true);toolToggle.checked=false;toolToggle.dispatchEvent(new w.Event('change'));await tick();
  assert.deepEqual(calls.find(c=>c[0]==='toolEnabled'),['toolEnabled','computer_action',false]);await w.showTools();assert.equal(document.querySelector('#toolCatalog input').checked,false);
  document.getElementById('enableAllTools').click();await tick();assert.equal(document.querySelector('#toolCatalog input').checked,true);w.close('toolsModal');
+ document.getElementById('clearAgentTools').click();await tick();assert.ok(document.getElementById('optionalToolsModal').classList.contains('open'));assert.match(document.getElementById('optionalToolsScope').textContent,/Only tools added/);assert.equal(document.querySelectorAll('#optionalToolsList img').length,0);
+ document.getElementById('cancelOptionalTools').click();await tick();assert.equal(calls.filter(c=>c[0]==='clearOptional').length,0);
+ document.getElementById('clearAllOptionalTools').click();await tick();assert.match(document.getElementById('optionalToolsScope').textContent,/All optional tools/);document.getElementById('confirmOptionalTools').click();await tick();assert.deepEqual(calls.find(c=>c[0]==='clearOptional'),['clearOptional','all','reviewed-all',true]);
+ document.getElementById('clearAgentTools').click();await tick();document.getElementById('confirmOptionalTools').click();await tick();assert.deepEqual(calls.filter(c=>c[0]==='clearOptional')[1],['clearOptional','agent','reviewed-agent',true]);
+ for(const lang of ['it','es','fr']) {w.VeyqI18N.setLanguage(lang);await tick();assert.notEqual(document.getElementById('clearAgentTools').textContent,'Remove agent-added tools');assert.notEqual(document.getElementById('clearAllOptionalTools').textContent,'Remove all optional tools');}
+ w.VeyqI18N.setLanguage('en');w.close('toolsModal');await tick();
  await w.showPlugins();await tick();assert.equal(document.querySelectorAll('#pluginList img,#pluginList script').length,0);assert.match(document.querySelector('#pluginList').textContent,/<img/);
  const pluginToggle=document.querySelector('#pluginList input[type=checkbox]');pluginToggle.checked=false;pluginToggle.dispatchEvent(new w.Event('change'));await tick();assert.deepEqual(calls.find(c=>c[0]==='pluginEnabled'),['pluginEnabled','plugin-one',false]);
  const pluginToken=document.querySelector('#pluginList input[type=password]');assert.equal(pluginToken.value,'');pluginToken.value='synthetic-test-token';[...document.querySelectorAll('#pluginList button')].find(b=>b.textContent==='Save token').click();await tick();assert.equal(document.querySelector('#pluginList input[type=password]').value,'');
