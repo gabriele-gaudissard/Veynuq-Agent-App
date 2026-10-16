@@ -974,6 +974,36 @@ async function showTools() {
 }
 action("toolsButton", showTools);
 action("closeTools", () => close("toolsModal"));
+let optionalToolsPreview = null;
+async function previewOptionalTools(scope) {
+  optionalToolsPreview = null;
+  const preview = await call('preview_optional_tools', scope);
+  optionalToolsPreview = preview;
+  $('optionalToolsScope').textContent = ui(scope === 'agent' ? 'Only tools added by the agent will be removed.' : 'All optional tools added by you or the agent will be removed.');
+  const host = $('optionalToolsList');host.replaceChildren();
+  if (!preview.count) {const empty=document.createElement('p');empty.textContent=ui('No optional tools to remove.');host.append(empty);}
+  for (const item of preview.items) {
+    const row=document.createElement('p');
+    row.textContent = `${item.name} ${item.version} · ${ui(item.kind==='plugin'?'Plugin':'Python environment')} · ${ui(item.installed_by==='agent'?'Added by the agent':'Added by you')}`;
+    host.append(row);
+  }
+  $('confirmOptionalTools').disabled = !preview.count;
+  open('optionalToolsModal');
+}
+action('clearAgentTools',()=>previewOptionalTools('agent'));
+action('clearAllOptionalTools',()=>previewOptionalTools('all'));
+action('cancelOptionalTools',()=>{optionalToolsPreview=null;close('optionalToolsModal');});
+action('confirmOptionalTools',async()=>{
+  if (!optionalToolsPreview) return;
+  $('confirmOptionalTools').disabled=true;
+  try {
+    const result=await call('clear_optional_tools',optionalToolsPreview.scope,optionalToolsPreview.digest,true);
+    optionalToolsPreview=null;close('optionalToolsModal');
+    toast(ui('Removed tools')+': '+result.removed_count);
+    if (result.errors.length) toast(result.errors.map(e=>e.name+': '+e.error).join('\n'));
+    await showTools();
+  } finally { $('confirmOptionalTools').disabled=false; }
+});
 action('enableAllTools', async () => { await call('enable_all_tools'); await showTools(); });
 async function showPlugins() {
   const result = await call('get_plugins');

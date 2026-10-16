@@ -166,6 +166,7 @@ class Store:
         self.data.setdefault("memory", "")
         self.data.setdefault("automations", [])
         self.data.setdefault("plugins", [])
+        self.data.setdefault('tool_environments', [])
         for job in self.data['automations']:
             if job.get('last_state') == 'running':
                 job.update(last_state='interrupted', enabled=False)

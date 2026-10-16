@@ -63,6 +63,7 @@ coverage/
 /sandboxes/
 /proposals/
 /plugins/
+/tool-environments/
 /voice-models/
 /image-engine/
 /windows-sandboxes/

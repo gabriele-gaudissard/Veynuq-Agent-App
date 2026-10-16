@@ -498,6 +498,8 @@ class Agent:
                 "Use generate_image for requested AI-generated PNGs. If an image engine is missing, explain the necessary Settings configuration; do not pretend code or a placeholder is a generated image. Credentials go only in the vault. "
                 "Use browser_open/state/action to navigate public websites with real DOM controls. These tools use an isolated browser and do not require a plugin. Use download_file for actual file downloads. "
                 "Use view_image for images and read_document for PDF/DOCX. For document/spreadsheet/chart creation use project Python code, install necessary libraries in a project virtual environment, and inspect the generated result. "
+                "If a needed capability is missing, obtain and use the appropriate tool rather than stopping at instructions. Check tool_setup list and plugin_catalog first. Discover relevant official tools with web_search/read_url. For Python tools use tool_setup inspect/install: this prepares a separate environment and returns exact Python/CLI paths for exec_cmd. For plugins use plugin_marketplace search/review/install, then plugin_catalog/tools/call. Finish and verify the original task after installation. Use official native package managers/installers through exec_cmd when Python wheels or supported plugins are unsuitable; prefer profile-managed tools when possible. Do not execute random web install scripts. Installed code has your account privileges: a virtual environment is not an OS sandbox. Respect all permission gates; never replace a disabled tool or bypass denied installation. Request an account, payment or administrator access only if genuinely needed. "
+                "For EXE/DLL analysis use inspect_binary first, never read_file or launch an unknown executable just to inspect it. Distinguish .NET from native code and acquire a suitable official decompiler/disassembler if deeper analysis is requested. Explain that decompiled code is approximate and original source cannot generally be recovered exactly. "
                 "Only ask for account access if the specific requested service actually requires it. Never ask for credentials in chat; direct the user to the app's vault settings or personal sign-in in a visible browser. Public websites and local PC tools do not require accounts. "
                 "A request to download and configure a repository means clone it, inspect its setup instructions, install dependencies in an isolated project environment, and verify the result. "
                 "Ask the user only for genuinely necessary missing information using ask_user; infer routine implementation choices. "
@@ -668,7 +670,8 @@ class Agent:
                                 verification_pending = bool(verification.pending)
                                 verification_attempts=0
                                 repair_note = ""
-                            if not result.get("ok") and any(s in result.get("error", "") for s in ("ha negato", "disabilitato", "disattivato")):
+                            if result.get('ok') and name in {'tool_setup','plugin_marketplace'} and args.get('action')=='install':action_performed=True
+                            if not result.get("ok") and any(s in result.get("error", "") for s in ("ha negato", "disabilitato", "disattivato", "disabled")):
                                 action_blocked = True
                             if function.get("name") in {"computer_inspect", "view_image"} and result.get("ok") and result.get("result", {}).get("image_path"):
                                 image_path = Path(result["result"]["image_path"]).resolve()

@@ -37,7 +37,7 @@ class Verification:
         if not result.get('ok'): return
         value = result.get('result', {})
         # Inspections discharge only relevant observations, never unrelated work.
-        if name in {'read_file', 'read_document', 'view_image'}:
+        if name in {'read_file', 'read_document', 'view_image', 'inspect_binary'}:
             target = self.path(args['path'])
             self.pending = [p for p in self.pending if not (p['kind'] == 'file' and p['target'] == target)]
         elif name == 'list_dir':

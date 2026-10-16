@@ -58,7 +58,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.5.4"
+        s["version"] = "4.5.5"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -67,14 +67,14 @@ class DesktopAPI:
         from .tools import TOOLS
         names = {tool['function']['name'] for tool in TOOLS}
         groups = [
-            ('Files and coding', 'Read, search, edit, run commands and tests, manage Git, clone repositories and restore backups.', {'list_dir','read_file','search_files','write_file','edit_file','make_dir','move_file','delete_file','exec_cmd','git_status','clone_repository','restore_backup','git_worktree','sandbox_changes','delegate_coding','proposal_changes'}),
+            ('Files and coding', 'Read, search, edit, run commands and tests, manage Git, clone repositories and restore backups.', {'tool_setup','inspect_binary','list_dir','read_file','search_files','write_file','edit_file','make_dir','move_file','delete_file','exec_cmd','git_status','clone_repository','restore_backup','git_worktree','sandbox_changes','delegate_coding','proposal_changes'}),
             ('Mouse and keyboard', 'Inspect Windows applications, click, double-click, right-click, drag, scroll, type and change keyboard layouts.', {'computer_windows','computer_inspect','computer_action','computer_pointer','computer_wait','windows_sandbox','computer_sandbox_type','keyboard_layout'}),
             ('Web and browser', 'Search, read websites, download files and operate an isolated browser with observed page elements.', {'web_search','read_url','download_file','browser_open','browser_state','browser_action'}),
             ('GitHub', 'Read and update repositories, issues, pull requests, branches and releases.', {'github'}),
             ('Images and documents', 'Inspect image files, generate PNGs with a configured image engine and read PDF/DOCX documents. Create documents, spreadsheets and charts with project code.', {'view_image','read_document','generate_image'}),
             ('Memory and task control', 'Maintain local memory, plan work, ask essential questions and use context from related project chats.', {'save_memory','update_plan','ask_user','read_project_context','checkpoint_task','load_procedure','delegate_tasks'}),
             ('Code intelligence', 'Navigate Python symbols, definitions, references and syntax diagnostics without executing project code.', {'code_intelligence'}),
-            ('Plugins', 'Load installed skills and connect to reviewed MCP tools when needed.', {'plugin_catalog','plugin_tools','plugin_call','plugin_extension'}),
+            ('Plugins', 'Load installed skills and connect to reviewed MCP tools when needed.', {'plugin_marketplace','plugin_catalog','plugin_tools','plugin_call','plugin_extension'}),
         ]
         disabled=set(self._store.snapshot()['settings'].get('disabled_tools', []))
         return {'total': len(names), 'enabled':len(names-disabled), 'groups': [{'name': title,'description': description,'count': len(tools & names),
@@ -108,6 +108,18 @@ class DesktopAPI:
         manager=Plugins(self._store)
         return {'plugins':[{**row,'has_token':bool(self._store.vault.get('plugin:'+row['id'])),
             'accounts':{name:bool(AccountStorage(self._store.root,key_for(row['id'],name)).read().get('tokens')) for name,cfg in row['servers'].items() if 'url' in cfg}} for row in manager.catalog()]}
+
+    def preview_optional_tools(self, scope='all'):
+        with self._agent.lock:
+            self._idle()
+            from .optional_tools import preview
+            return preview(self._store,scope)
+
+    def clear_optional_tools(self, scope, digest, confirmed=False):
+        with self._agent.lock:
+            self._idle()
+            from .optional_tools import clear
+            return clear(self._store,scope,digest,confirmed)
 
     def install_plugin_folder(self, confirmed=False):
         with self._agent.lock:
@@ -1004,7 +1016,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.5.4", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.5.5", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates

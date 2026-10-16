@@ -48,7 +48,7 @@
           ><button id="memory">◇ Local memory</button
           ><button id="toolsButton">⌘ Tools</button
           ><button id="settingsButton">⚙ Settings</button>
-          <div class="sub">Desktop agent · v4.5.4<br />No telemetry</div>
+          <div class="sub">Desktop agent · v4.5.5<br />No telemetry</div>
         </div>
       </aside>
       <main>
@@ -215,7 +215,19 @@
         </p>
         <div id="toolCatalog"></div>
         <p class="sub">All built-in tools are included and enabled by default. Turning a tool off removes it from the agent and blocks its execution. Permissions and external requirements still apply.</p>
+        <h3>Optional tools</h3>
+        <p class="sub">Remove plugins and Python tool environments managed by Veynuq. Built-in tools, models and conversations are kept. Components with unknown installation history are treated as user additions. Programs installed outside this inventory are not removed.</p>
+        <div class="buttons"><button id="clearAgentTools">Remove agent-added tools</button><button id="clearAllOptionalTools">Remove all optional tools</button></div>
         <div class="buttons"><button id="pluginsButton">Plugins</button><button id="enableAllTools">Enable all tools</button><button id="closeTools">Close</button></div>
+      </section>
+    </div>
+    <div aria-modal="true" class="modal" id="optionalToolsModal" role="dialog" aria-labelledby="optionalToolsTitle">
+      <section class="dialog">
+        <h2 id="optionalToolsTitle">Review optional tool removal</h2>
+        <p id="optionalToolsScope" class="intro"></p>
+        <p class="sub">This removes the listed components and their saved plugin credentials. Files created by those tools are kept.</p>
+        <div id="optionalToolsList"></div>
+        <div class="buttons"><button id="cancelOptionalTools">Cancel</button><button class="primary" id="confirmOptionalTools">Remove listed tools</button></div>
       </section>
     </div>
     <div aria-modal="true" class="modal" id="pluginsModal" role="dialog">

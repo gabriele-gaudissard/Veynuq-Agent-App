@@ -74,7 +74,7 @@ def selection(value, revision, name):
     return {'repository':repo,'commit':commit,'path':str(path),'name':name,'marketplace':reviewed['repository'],'revision':revision}
 
 
-def install(store, value, revision, name, reviewed_source):
+def install(store, value, revision, name, reviewed_source, installed_by='user'):
     # The user confirms an immutable resolved source, never a moving branch.
     manifest=catalog(value,revision)
     entry=next((p for p in manifest['plugins'] if p['name']==name and p['supported']),None)
@@ -108,7 +108,7 @@ def install(store, value, revision, name, reviewed_source):
                 dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(archive.read(item))
         if not (unpacked/'plugin.json').exists() and not (unpacked/'.claude-plugin/plugin.json').exists():
             (unpacked/'plugin.json').write_text(json.dumps({'name':name,'description':entry.get('description','')}),encoding='utf-8')
-        result=Plugins(store).install(unpacked)
+        result=Plugins(store).install(unpacked,installed_by=installed_by)
         provenance={'repository':repo,'commit':commit,'path':str(path),'marketplace':manifest['repository'],'revision':revision}
         with store.lock:
             next(p for p in store.data['plugins'] if p['id']==result['id'])['source']=provenance

@@ -95,7 +95,8 @@ class Plugins:
         actual = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() and '__pycache__' not in p.parts}
         if actual != set(row['files']): raise PermissionError('Installed plugin has unexpected files; reinstall before use.')
 
-    def install(self, source):
+    def install(self, source, installed_by='user'):
+        if installed_by not in {'user','agent'}:raise ValueError('Invalid installation origin.')
         source = Path(source).resolve()
         if not source.is_dir() or source == Path(source.anchor) or source.is_relative_to(self.store.root):
             raise ValueError('Choose a separate plugin folder.')
@@ -170,7 +171,7 @@ class Plugins:
             if len(servers)>10 or not (skills or servers or hooks or lsp): raise ValueError('No supported skills, commands or MCP servers were found.')
             unsupported = [key for key in ('userConfig','dependencies','experimental') if key in manifest]
             row = {'id':plugin_id, 'name':name, 'description':str(manifest.get('description',''))[:500], 'version':str(manifest.get('version',''))[:40],
-                   'enabled':True, 'skills':skills, 'servers':servers, 'files':files, 'unsupported':unsupported,'hooks':hooks,'lsp':lsp}
+                   'enabled':True, 'skills':skills, 'servers':servers, 'files':files, 'unsupported':unsupported,'hooks':hooks,'lsp':lsp,'installed_by':installed_by}
             with self.store.lock:
                 self.store.data.setdefault('plugins', []).append(row)
                 self.store.save()
@@ -181,6 +182,7 @@ class Plugins:
 
     def public(self, row):
         result={k: copy.deepcopy(row.get(k,{} if k in {'hooks','lsp'} else row[k])) for k in ('id','name','description','version','enabled','skills','servers','unsupported','hooks','lsp')}
+        result['installed_by']=row.get('installed_by','user')
         if row.get('source'):result['source']=copy.deepcopy(row['source'])
         return result
 
