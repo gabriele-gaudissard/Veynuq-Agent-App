@@ -27,8 +27,8 @@ jobs:
         # Development-only files stay out of the user's main tree and ZIP.
         # This immutable baseline contains 238 backend checks and the UI suite.
         run: |
-          git fetch --depth=1 origin 89c864442ce13707c29c589c548151c940d39455
-          git restore --source=89c864442ce13707c29c589c548151c940d39455 --worktree -- tests package.json package-lock.json ui-translations.json
+          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
+          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests package.json package-lock.json ui-translations.json
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q app.py veyq
@@ -45,8 +45,8 @@ jobs:
           python-version: "3.13"
       - name: Restore pinned controlled sandbox checks
         run: |
-          git fetch --depth=1 origin 89c864442ce13707c29c589c548151c940d39455
-          git restore --source=89c864442ce13707c29c589c548151c940d39455 --worktree -- tests
+          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
+          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests
       - run: python -m pip install -r requirements.txt
       - run: docker pull python:3.13-slim
       - run: python -m unittest discover -s tests -p test_advanced.py -v
@@ -63,8 +63,8 @@ jobs:
           python-version: "3.13"
       - name: Restore pinned fresh-install verification
         run: |
-          git fetch --depth=1 origin 89c864442ce13707c29c589c548151c940d39455
-          git restore --source=89c864442ce13707c29c589c548151c940d39455 --worktree -- tests
+          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
+          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests
       - run: python -m pip install 'cryptography>=46,<49'
       - run: python tests/fresh_install_check.py
 
@@ -77,8 +77,8 @@ jobs:
           python-version: "3.13"
       - name: Restore native installer checks
         run: |
-          git fetch --depth=1 origin 89c864442ce13707c29c589c548151c940d39455
-          git restore --source=89c864442ce13707c29c589c548151c940d39455 --worktree -- tests
+          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
+          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests
       - run: .github/prepare_compiler.ps1
       - run: python tests/native_setup_check.py --compiler "$env:VEYNUQ_ISCC"
 
