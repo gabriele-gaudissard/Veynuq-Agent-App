@@ -56,7 +56,11 @@ function Find-CurrentPython { $script:lookups++; if($script:lookups -gt 1){ retu
 function Get-PythonInfo { param($Executable); if($Executable -eq 'C:\\Controlled\\ExistingPython313\\python.exe'){ return @{version='3.13.16';stable=$true;architecture='AMD64';bits=64;executable=$Executable} } }
 function Invoke-WebRequest { param($Uri,$OutFile,[switch]$UseBasicParsing,$TimeoutSec); Set-Content -LiteralPath $OutFile -Value 'signed fixture' }
 function Get-AuthenticodeSignature { return @{Status='Valid';SignerCertificate=@{Subject='CN=Python Software Foundation'}} }
-function Start-Process { $process=[pscustomobject]@{ExitCode=0}; $process | Add-Member ScriptMethod WaitForExit { return $true }; return $process }
+function Start-Process {
+ param($FilePath,$ArgumentList,$WindowStyle,[switch]$PassThru)
+ if($ArgumentList -notmatch '/passive' -or $ArgumentList -match '/quiet' -or $WindowStyle -ne 'Normal'){throw 'Python progress must remain visible without requiring interaction'}
+ $process=[pscustomobject]@{ExitCode=0}; $process | Add-Member ScriptMethod WaitForExit { return $true }; return $process
+}
 $result=Install-CurrentPython $PSScriptRoot '3.13'
 if($result -ne 'C:\\Controlled\\ExistingPython313\\python.exe'){throw 'Existing patch-updated installation was not resolved'}
 """)
