@@ -26,7 +26,7 @@ def startup_log():
     if sys.stdout is None:
         sys.stdout = stream
     faulthandler.enable(file=stream)
-    if not any(flag in sys.argv for flag in ('--install','--prepare-images','--self-check','--background')):
+    if not any(flag in sys.argv for flag in ('--install','--prepare-images','--prepare-all','--self-check','--background')):
         faulthandler.dump_traceback_later(30, file=stream)
     return stream, path
 

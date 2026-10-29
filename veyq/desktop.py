@@ -58,7 +58,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.5.5"
+        s["version"] = "4.6.0"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -993,6 +993,10 @@ def main():
 
 def foreground_main(data_dir):
     store = Store(root=data_dir, legacy=ROOT / "codex_data.json")
+    if '--prepare-all' in sys.argv:
+        from .first_run import prepare
+        print(json.dumps(prepare(store)),flush=True)
+        return
     if '--prepare-images' in sys.argv:
         from .image_setup import prepare_for_install
         last_progress = {}
@@ -1016,7 +1020,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.5.5", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.6.0", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates

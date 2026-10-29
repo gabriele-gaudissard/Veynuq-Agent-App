@@ -28,6 +28,7 @@ Additional runtime components:
 | MCP Python SDK | Plugin tool transports | MIT |
 | jsonschema | External tool argument validation | MIT |
 | Jedi / Parso | Static Python code intelligence | MIT |
+| Inno Setup | Native Windows installation wizard | Inno Setup license; https://jrsoftware.org/isinfo.php |
 | stable-diffusion.cpp | Optional separately downloaded local image runtime | MIT |
 | Stable Diffusion 1.5 | Optional separately downloaded image weights | CreativeML Open RAIL-M |
 | Playwright | Isolated Edge browser control | Apache-2.0 |

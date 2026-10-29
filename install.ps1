@@ -1,7 +1,12 @@
-param([switch]$ShortcutOnly, [string]$ShortcutDirectory = '')
+param([switch]$ShortcutOnly, [string]$ShortcutDirectory = '', [switch]$Complete)
 $ErrorActionPreference = 'Stop'
 $appRoot = $PSScriptRoot
 Set-Location -LiteralPath $appRoot
+if ($Complete) { Start-Transcript -Path (Join-Path $appRoot 'setup-install.log') -Append -Force | Out-Null }
+trap {
+    if ($Complete) { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null }
+    throw
+}
 function New-AppShortcuts {
     $iconPath = Join-Path $appRoot 'assets\brand\veynuq-dark.ico'
     if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) { throw 'App icon is missing. Extract the complete release archive and run the installer again.' }
@@ -48,11 +53,17 @@ Write-Host '[4/5] Preparing the default local image generator (SD 1.5, CPU, no a
 Write-Host 'First download: approximately 4.3 GB. Allow approximately 5 GB of free disk space. Verified existing files are reused.'
 & $runtimePython (Join-Path $appRoot 'app.py') --prepare-images
 if ($LASTEXITCODE -ne 0) { throw 'Image engine setup failed. Retry Installer.bat, or use Prepare local image engine in Settings. The previous runtime is preserved.' }
+Write-Host '[5/5] Creating shortcuts with the Veynuq icon...'
+if ($Complete) {
+    Write-Host 'Preparing the chat model, dictation, interface and coding tools...'
+    & $runtimePython (Join-Path $appRoot 'app.py') --prepare-all
+    if ($LASTEXITCODE -ne 0) { throw 'Complete configuration failed. Retry Veynuq-Setup.exe. Downloaded components are reused.' }
+}
 $runtimeFile = Join-Path $appRoot 'runtime.json'
 $runtimeTemp = $runtimeFile + '.tmp'
 [IO.File]::WriteAllText($runtimeTemp, (@{ python = $runtimePython } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 Move-Item -LiteralPath $runtimeTemp -Destination $runtimeFile -Force
-Write-Host '[5/5] Creating shortcuts with the Veynuq icon...'
 New-AppShortcuts
 Write-Host 'Veynuq is installed. Open the Desktop shortcut to start.'
 Write-Host 'Choose a local model or a compatible provider in Settings. Existing engines are reused.'
+if ($Complete) { Stop-Transcript | Out-Null }

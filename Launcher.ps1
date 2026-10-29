@@ -1,5 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $appRoot = $PSScriptRoot
+foreach ($gitFolder in @((Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd'),(Join-Path $env:ProgramFiles 'Git\cmd'))) {
+    if (Test-Path -LiteralPath (Join-Path $gitFolder 'git.exe')) { $env:PATH = $gitFolder + ';' + $env:PATH }
+}
 $pythonPath = Join-Path $appRoot '.venv\Scripts\pythonw.exe'
 $runtimeFile = Join-Path $appRoot 'runtime.json'
 if (Test-Path -LiteralPath $runtimeFile) {

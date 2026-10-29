@@ -88,10 +88,16 @@ class Browser:
         if process.stdout: process.stdout.close()
 
 
+def edge_available():
+    return any((Path(os.environ.get(name,''))/suffix/'Microsoft/Edge/Application/msedge.exe').is_file()
+               for name,suffix in [('ProgramFiles(x86)',''),('ProgramFiles',''),('LOCALAPPDATA','')])
+
+
 class BrowserWorker:
     def __init__(self, root):
         from playwright.sync_api import sync_playwright
         self.root = Path(root)
+        if (self.root/'browser-runtime').is_dir():os.environ['PLAYWRIGHT_BROWSERS_PATH']=str(self.root/'browser-runtime')
         self.playwright = sync_playwright().start()
         self.context = None
         self.page = None
@@ -124,7 +130,7 @@ class BrowserWorker:
         self.allowed_url(url)
         if self.context is None:
             self.context = self.playwright.chromium.launch_persistent_context(str(self.root/'browser-profile'),
-                channel='msedge', headless=not visible, accept_downloads=False, service_workers='block')
+                **({'channel':'msedge'} if edge_available() else {}), headless=not visible, accept_downloads=False, service_workers='block')
             self.context.set_default_timeout(10000)
             self.context.set_default_navigation_timeout(25000)
             self.context.route('**/*', self.route)

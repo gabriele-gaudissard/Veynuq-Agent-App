@@ -43,7 +43,7 @@ def setup_engine(data_root):
                             raise RuntimeError("Installer exceeds the download limit.")
                         output.write(chunk)
             literal = str(installer).replace("'", "''")
-            check = "$s=Get-AuthenticodeSignature -LiteralPath '" + literal + "'; if($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Ollama'){exit 1}"
+            check = "Import-Module (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; $s=Get-AuthenticodeSignature -LiteralPath '" + literal + "'; if($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Ollama'){exit 1}"
             result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", check], creationflags=subprocess.CREATE_NO_WINDOW, timeout=60)
             if result.returncode:
                 raise RuntimeError("Local-engine installer signature is invalid or has an unexpected publisher.")
