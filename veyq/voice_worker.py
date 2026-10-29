@@ -58,6 +58,8 @@ def main():
 
 
 if __name__=='__main__':
+    from .tls import initialize
+    initialize()
     try:main()
     except Exception:
         emit(state='error',error='Speech model download failed. Check your connection and retry.' if sys.argv[1:2]==['prepare'] else 'Local dictation failed. Check the microphone and retry.')

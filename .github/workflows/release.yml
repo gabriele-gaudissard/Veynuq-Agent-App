@@ -25,10 +25,10 @@ jobs:
           node-version: "22"
       - name: Restore pinned verification tools from repository history
         # Development-only files stay out of the user's main tree and ZIP.
-        # This immutable baseline contains 238 backend checks and the UI suite.
+        # This immutable baseline contains 240 backend checks and the UI suite.
         run: |
-          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
-          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests package.json package-lock.json ui-translations.json
+          git fetch --depth=1 origin 60d9d32826485c14d21f3ce53196591938372364
+          git restore --source=60d9d32826485c14d21f3ce53196591938372364 --worktree -- tests package.json package-lock.json ui-translations.json
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q app.py veyq
@@ -45,8 +45,8 @@ jobs:
           python-version: "3.13"
       - name: Restore pinned controlled sandbox checks
         run: |
-          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
-          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests
+          git fetch --depth=1 origin 60d9d32826485c14d21f3ce53196591938372364
+          git restore --source=60d9d32826485c14d21f3ce53196591938372364 --worktree -- tests
       - run: python -m pip install -r requirements.txt
       - run: docker pull python:3.13-slim
       - run: python -m unittest discover -s tests -p test_advanced.py -v
@@ -63,8 +63,8 @@ jobs:
           python-version: "3.13"
       - name: Restore pinned fresh-install verification
         run: |
-          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
-          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests
+          git fetch --depth=1 origin 60d9d32826485c14d21f3ce53196591938372364
+          git restore --source=60d9d32826485c14d21f3ce53196591938372364 --worktree -- tests
       - run: python -m pip install 'cryptography>=46,<49'
       - run: python tests/fresh_install_check.py
 
@@ -77,8 +77,8 @@ jobs:
           python-version: "3.13"
       - name: Restore native installer checks
         run: |
-          git fetch --depth=1 origin 42011bb9bc5600b644ed60115c9beaddfa34a861
-          git restore --source=42011bb9bc5600b644ed60115c9beaddfa34a861 --worktree -- tests
+          git fetch --depth=1 origin 60d9d32826485c14d21f3ce53196591938372364
+          git restore --source=60d9d32826485c14d21f3ce53196591938372364 --worktree -- tests
       - run: .github/prepare_compiler.ps1
       - run: python tests/native_setup_check.py --compiler "$env:VEYNUQ_ISCC"
 
@@ -110,5 +110,5 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --clobber
           else
-            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.0 · ${BUILD_SHA:0:7}" --notes "Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
+            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.1 · ${BUILD_SHA:0:7}" --notes "Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
           fi

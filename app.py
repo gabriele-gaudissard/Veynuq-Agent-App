@@ -37,6 +37,7 @@ def ensure_dependencies(stream):
     required = ["webview", "requests", "bs4", "cryptography", "pypdf", "PIL", "playwright", "faster_whisper", "sounddevice", "mcp", "jsonschema", "jedi", "packaging"]
     if os.name == "nt":
         required.append("pywinauto")
+        required.append("truststore")
     if any(importlib.util.find_spec(name) is None for name in required):
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         result = subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(Path(__file__).parent / "requirements.txt")],
@@ -50,14 +51,18 @@ if __name__ == '__main__':
     try:
         # A scheduled read-only worker must never install software in the background.
         if '--background' not in sys.argv: ensure_dependencies(diagnostic_stream)
+        from veyq.tls import initialize
+        initialize()
         from veyq.desktop import main
         main()
     except Exception as error:
         faulthandler.cancel_dump_traceback_later()
         logging.exception("Veynuq startup failed")
+        from veyq.tls import diagnostic
+        detail=diagnostic(error)
         if os.name == 'nt' and gui_launch and '--background' not in sys.argv:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(0, str(error) + "\n\nDiagnostica: " + str(diagnostic_path), 'Veynuq - Avvio non riuscito', 0x10)
+            ctypes.windll.user32.MessageBoxW(0, detail + "\n\nDiagnostica: " + str(diagnostic_path), 'Veynuq - Avvio non riuscito', 0x10)
         else:
-            print(str(error), file=sys.stderr)
+            print(detail, file=sys.stderr)
         sys.exit(1)

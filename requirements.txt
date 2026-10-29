@@ -15,3 +15,4 @@ mcp>=1.30,<2
 jsonschema>=4.25,<5
 jedi>=0.19.2,<0.20
 packaging>=25,<27
+truststore>=0.10.4,<0.11; sys_platform == 'win32'

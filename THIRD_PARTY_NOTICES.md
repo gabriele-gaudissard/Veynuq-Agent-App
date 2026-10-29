@@ -27,6 +27,7 @@ Additional runtime components:
 | Pillow | Window screenshot encoding | HPND |
 | MCP Python SDK | Plugin tool transports | MIT |
 | jsonschema | External tool argument validation | MIT |
+| truststore | Native Windows certificate validation | MIT |
 | Jedi / Parso | Static Python code intelligence | MIT |
 | Inno Setup | Native Windows installation wizard | Inno Setup license; https://jrsoftware.org/isinfo.php |
 | stable-diffusion.cpp | Optional separately downloaded local image runtime | MIT |

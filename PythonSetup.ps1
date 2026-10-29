@@ -59,6 +59,7 @@ function Find-CurrentPython($Release, [string]$Root) {
 }
 
 function Install-CurrentPython([string]$Root, [string]$Series = '') {
+    $ProgressPreference = 'Continue'
     Write-Host '[1/5] Checking the latest stable Python release...'
     $release = Get-LatestPythonRelease $Series
     if ($Series) { $release.series = $Series }
@@ -80,8 +81,9 @@ function Install-CurrentPython([string]$Root, [string]$Series = '') {
         if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Python Software Foundation') { throw 'Python installer signature is invalid or has an unexpected publisher.' }
         # The PSF installer may upgrade an existing installation in the same
         # minor series. Keep other series, PATH, associations and launcher.
-        $arguments = '/quiet InstallAllUsers=0 TargetDir="' + $destination + '" Include_launcher=0 InstallLauncherAllUsers=0 AssociateFiles=0 PrependPath=0 Include_test=0 Shortcuts=0 Include_doc=0'
-        $process = Start-Process -FilePath $download -ArgumentList $arguments -WindowStyle Hidden -PassThru
+        Write-Host ('Installing Python ' + $release.version + '. A progress window will remain visible until setup finishes...')
+        $arguments = '/passive InstallAllUsers=0 TargetDir="' + $destination + '" Include_launcher=0 InstallLauncherAllUsers=0 AssociateFiles=0 PrependPath=0 Include_test=0 Shortcuts=0 Include_doc=0'
+        $process = Start-Process -FilePath $download -ArgumentList $arguments -WindowStyle Normal -PassThru
         if (-not $process.WaitForExit(600000)) { Stop-Process -Id $process.Id -ErrorAction SilentlyContinue; throw 'Python installation timed out. No app runtime was switched.' }
         if ($process.ExitCode -notin @(0,3010)) { throw ('Python installation failed: ' + $process.ExitCode) }
         $python = Join-Path $destination 'python.exe'
