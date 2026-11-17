@@ -198,6 +198,11 @@ class GenerationTests(unittest.TestCase):
         self.assertIn("End of answer.", result[-2]["content"])
         self.assertLess(sum(map(message_tokens, result)), 1500)
 
+    def test_numeric_identifiers_are_budgeted_as_separate_tokens(self):
+        sample = " ".join(f"log-123-{i:03d}" for i in range(100))
+        cost = message_tokens({"role": "user", "content": sample})
+        self.assertGreaterEqual(cost, 900)
+
     def test_partial_answer_is_saved_and_can_be_continued_in_same_chat(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

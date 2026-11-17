@@ -27,11 +27,19 @@ def context_capacity(settings, metadata=None):
     return min(limits)
 
 
-def estimate_tokens(value, bytes_per_token=3):
-    # Providers do not share a tokenizer or a chat template. Use UTF-8 bytes
-    # as a practical estimate and keep a reserve; report real usage separately.
-    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    return (len(encoded) + bytes_per_token - 1) // bytes_per_token
+def estimate_tokens(value, *, tool_definitions=False):
+    # Providers do not share a tokenizer or chat template. Count UTF-8 for
+    # multilingual text, and account for numeric and punctuation-heavy inputs
+    # such as log IDs. Qwen can encode each digit as a separate token.
+    text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    size = len(text.encode("utf-8"))
+    if tool_definitions:
+        return (size + 3) // 4
+    lexical = sum(len(part) if part.isdecimal() else
+                  (len(part) + 3) // 4 if part.isalpha() else
+                  (len(part) + 1) // 2
+                  for part in re.findall(r"[a-zA-Z]+|[0-9]+|[^\w\s]+", text))
+    return max((size + 2) // 3, lexical)
 
 
 def message_tokens(message):
@@ -47,7 +55,7 @@ def message_tokens(message):
 
 
 def prompt_tokens(messages, tools):
-    return 32 + sum(map(message_tokens, messages)) + (estimate_tokens(tools, bytes_per_token=4) if tools else 0)
+    return 32 + sum(map(message_tokens, messages)) + (estimate_tokens(tools, tool_definitions=True) if tools else 0)
 
 
 def output_budget(settings, capacity, estimated_prompt):
