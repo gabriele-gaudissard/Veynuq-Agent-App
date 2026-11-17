@@ -1,0 +1,26 @@
+--- a/tests/test_controls.py
++++ b/tests/test_controls.py
+@@ -27,7 +27,12 @@
+         self.api=DesktopAPI(self.store);self.sid=self.api.create_session();self.agent=self.api._agent
+         self.runner=ToolRunner(self.store,self.store.snapshot()['settings'],'controls',threading.Event(),lambda *a:None,lambda *a:True,self.root,{})
+     def tearDown(self):
+-        self.agent.stop();self.runner.close();self.temp.cleanup()
++        self.agent.stop()
++        worker = getattr(self.agent, 'worker', None)
++        if worker:
++            worker.join(15)
++        self.runner.close()
++        self.temp.cleanup()
+     def pointer_fixture(self):
+         computer=Computer(self.store.root);rect=types.SimpleNamespace(left=100,top=100,right=500,bottom=500)
+         window=Mock();window.rectangle.return_value=rect;window.handle=42
+@@ -104,8 +109,7 @@
+         def chat(client,messages):contexts.append(copy.deepcopy(messages));return replies.pop(0)
+         with patch.object(ModelClient,'chat',chat),patch.object(self.agent,'_drain_followups',side_effect=drain):
+             self.agent.start(self.sid,'Create first.txt')
+-            deadline=time.monotonic()+5
+-            while self.agent.busy and time.monotonic()<deadline:time.sleep(.01)
++            self.agent.worker.join(20)
+         self.assertFalse(self.agent.busy);self.assertEqual((self.workspace/'second.txt').read_text(),'second');self.assertEqual(len(contexts),6)
+     def test_mixed_execute_and_explain_request_still_requires_execution(self):
+         self.assertTrue(action_intent('Scrivi il file e spiegami cosa contiene'))
