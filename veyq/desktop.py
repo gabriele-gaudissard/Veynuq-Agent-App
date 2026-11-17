@@ -233,7 +233,7 @@ class DesktopAPI:
             if not isinstance(values, dict):
                 raise ValueError("Impostazioni non valide.")
             s = self._store.snapshot()["settings"]
-            for key in ("lang", "provider", "url", "model", "permission", "network", "max_steps", "command_timeout", "github_repo", "auto_update", "vision", "execution_environment", "desktop_scope", "background_schedules", "image_provider", "image_url", "image_model", "context_tokens", "response_tokens"):
+            for key in ("lang", "provider", "url", "model", "permission", "network", "max_steps", "command_timeout", "github_repo", "auto_update", "vision", "execution_environment", "desktop_scope", "background_schedules", "image_provider", "image_url", "image_model", "context_tokens", "response_tokens", "tool_retries", "model_streaming"):
                 if key in values:
                     s[key] = values[key]
             if s["provider"] not in {"local", "compatible"} or s["permission"] not in {"always", "auto", "full"}:
@@ -246,6 +246,10 @@ class DesktopAPI:
             if type(s['background_schedules']) is not bool: raise ValueError('Invalid background setting.')
             if type(s['context_tokens']) is not int or not 8192<=s['context_tokens']<=65536: raise ValueError('Context tokens must be between 8192 and 65536.')
             if type(s['response_tokens']) is not int or not 512<=s['response_tokens']<=8192: raise ValueError('Response tokens must be between 512 and 8192.')
+            if type(s['tool_retries']) is not int or not 0 <= s['tool_retries'] <= 3:
+                raise ValueError('Tool recovery attempts must be between 0 and 3.')
+            if type(s['model_streaming']) is not bool:
+                raise ValueError('Streaming model responses must be enabled or disabled.')
             if s['image_provider'] not in {'disabled','managed','local_sd','compatible'}: raise ValueError('Unknown image engine.')
             if not isinstance(s['image_model'],str) or len(s['image_model'])>200: raise ValueError('Invalid image model name.')
             if s['image_provider'] not in {'disabled','managed'}:

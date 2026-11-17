@@ -29,6 +29,10 @@ def investigate(runner, tasks):
         cancel = threading.Event()
         class Cancellation:
             def is_set(self): return cancel.is_set() or runner.cancel.is_set()
+
+            def wait(self, timeout):
+                cancel.wait(timeout)
+                return self.is_set()
         client = ModelClient(copy.deepcopy(runner.settings), secrets[0], Cancellation(), lambda *a: None)
         client.tools = [t for t in TOOLS if t['function']['name'] in allowed]
         runner.child_clients.append(client)

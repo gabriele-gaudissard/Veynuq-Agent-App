@@ -29,6 +29,28 @@ def compact(session, limit):
     for message in result:
         if message.get('role') == 'tool' and len(message.get('content', '')) > 5000:
             message['content'] = message['content'][:5000] + '\n[Earlier output shortened; inspect the source again when needed.]'
+    # A legacy failed response could have been persisted before validation.
+    # Keep the transcript on disk, and send the provider only usable exchanges.
+    from .engine import decode_arguments
+    index = 0
+    while index < len(result):
+        calls = result[index].get('tool_calls') or []
+        if not calls:
+            index += 1
+            continue
+        ids, end = tool_exchange(result, index)
+        valid = len(ids) == len(calls) and None not in ids and {m.get('tool_call_id') for m in result[index+1:end]} == ids
+        if valid:
+            try:
+                valid = all(isinstance(decode_arguments(c['function'].get('arguments', {})), dict) for c in calls)
+            except (KeyError, TypeError, ValueError, RecursionError):
+                valid = False
+        write = any(c.get('function', {}).get('name') == 'write_file' for c in calls)
+        if not valid or (write and len(json.dumps(result)) > limit):
+            result[index:end] = [tool_observation(result[index+1:end])]
+            index += 1
+        else:
+            index = end
     # A long single task can contain many tool exchanges without a new user turn.
     # Replace whole completed exchanges; preserve requests and the recent tail.
     while len(json.dumps(result)) > limit:
@@ -38,13 +60,25 @@ def compact(session, limit):
             if index is None: break
             result.pop(index)
             continue
-        ids = {c['id'] for c in result[index]['tool_calls']}
-        end = index + 1
-        while end < len(result) and result[end].get('role') == 'tool' and result[end].get('tool_call_id') in ids: end += 1
+        ids, end = tool_exchange(result, index)
         if {m.get('tool_call_id') for m in result[index+1:end]} != ids: break
-        note = 'Earlier tool observations (verify before reuse): ' + '; '.join(m.get('name', '') + ': ' + str(m.get('content', ''))[:350] for m in result[index+1:end])
-        result[index:end] = [{'role': 'assistant', 'content': note[:1500]}]
+        result[index:end] = [tool_observation(result[index+1:end])]
     return result
+
+
+def tool_exchange(messages, index):
+    ids = {c.get('id') for c in messages[index]['tool_calls']}
+    end = index + 1
+    while end < len(messages) and messages[end].get('role') == 'tool' and messages[end].get('tool_call_id') in ids:
+        end += 1
+    return ids, end
+
+
+def tool_observation(results):
+    if not results:
+        return {'role': 'assistant', 'content': 'Earlier tool response has no recorded outcome. Inspect actual state before retrying.'}
+    note = '\n'.join(m.get('name', '') + ': ' + str(m.get('content', ''))[:350] for m in results)
+    return {'role': 'assistant', 'content': 'Earlier tool observations (verify before reuse): ' + note[:1500]}
 
 
 def checkpoint(session, state, **values):

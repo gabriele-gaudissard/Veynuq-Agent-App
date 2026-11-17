@@ -20,7 +20,7 @@ DEFAULTS = {
     "execution_environment": "host",
     "desktop_scope": "all", "background_schedules": False,
     "image_provider": "managed", "image_url": "http://127.0.0.1:7860", "image_model": "",
-    "context_tokens": 16384, "response_tokens": 4096,
+    "context_tokens": 16384, "response_tokens": 4096, "tool_retries": 2, "model_streaming": True,
     "collapsed_projects": [],
     "disabled_tools": [],
 }

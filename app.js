@@ -569,7 +569,7 @@ async function poll() {
           e.session_id,
           (liveDrafts.get(e.session_id) || "") + d.text,
         );
-      if (e.type === "message" || e.type === "done")
+      if (["message", "done", "discard_text"].includes(e.type))
         liveDrafts.delete(e.session_id);
       if (e.type === "done") await refreshSessions();
       if (e.session_id && e.session_id !== sessionId) continue;
@@ -583,12 +583,20 @@ async function poll() {
           renderText(streamNode, streamText);
           scrollBottom();
           break;
+        case "discard_text":
+          streamNode?.closest(".message")?.remove();
+          streamNode = null;
+          streamText = "";
+          break;
         case "message":
           if (d.message.content) {
             if (streamNode) {
               renderText(streamNode, d.message.content);
             } else
               message("assistant", d.message.content, d.history_index ?? null);
+          } else {
+            streamNode?.closest(".message")?.remove();
+            streamNode = null;
           }
           if (streamNode && d.history_index !== undefined)
             streamNode.closest(".message").dataset.historyIndex =
@@ -604,17 +612,22 @@ async function poll() {
           );
           $("state").textContent = d.tool;
           break;
-        case "tool_result":
+        case "tool_result": {
+          const staged = d.tool === "write_file" && d.result?.result?.published === false;
           activity(
-            (d.result?.ok === false ? "⚠ " : "✓ ") + d.tool,
+            staged ? "↗ " + d.tool + " · " + ui("Draft part saved") :
+              (d.result?.ok === false ? "⚠ " : "✓ ") + d.tool,
             d.result,
             d.result?.ok === false
               ? "error"
-              : d.tool === "save_memory"
-                ? "memory"
-                : "success",
+              : staged
+                ? "running"
+                : d.tool === "save_memory"
+                  ? "memory"
+                  : "success",
           );
           break;
+        }
         case "plan":
           renderPlan(d.steps);
           break;
@@ -911,6 +924,8 @@ async function showSettings() {
     ['imageProvider','image_provider'],['imageEndpoint','image_url'],['imageModel','image_model'],
   ])
     $(id).value = settings[key];
+  $("toolRetries").value = settings.tool_retries ?? 2;
+  $("modelStreaming").checked = settings.model_streaming !== false;
   $("network").checked = settings.network;
   $("vision").checked = !!settings.vision;
   $("autoUpdate").checked = !!settings.auto_update;
@@ -1103,6 +1118,7 @@ async function saveSettings() {
     execution_environment: $("executionEnvironment").value || 'host',
     desktop_scope:$('desktopScope').value || 'all',
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),
+    tool_retries:Number($('toolRetries').value),model_streaming:$('modelStreaming').checked,
     background_schedules:$('backgroundSchedules').checked,
     image_provider:$('imageProvider').value,image_url:$('imageEndpoint').value.trim(),image_model:$('imageModel').value.trim(),image_token:$('imageToken').value,
     provider_token: $("providerToken").value,

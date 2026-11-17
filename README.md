@@ -82,6 +82,10 @@ You can switch existing chats while an agent works and return to the partial res
 
 The local protocol uses `/api/chat`, `/api/tags`, `/api/show`, `/api/pull` and `/api/delete`. Compatible APIs use `/chat/completions` and `/models`; include `/v1` where required. Remote endpoints require HTTPS and online access. Local unauthenticated endpoints need no token. Remote vision input is an explicit setting.
 
+For local Qwen3.5 GGUF models with native tools, start with a **16,384-token context**, **4,096 response tokens** and the embedded chat template. Veynuq sends temperature **0.15** in local mode. If large replies routinely hit the cap and the hardware has room, try **8,192 response tokens** while allowing enough context for the prompt and recent history. For a standalone llama.cpp server, use a compatible endpoint ending in `/v1`, enable Jinja tool calling (`--jinja` on builds that require it), and set context and generation limits on that server.
+
+The **Tool recovery attempts** setting defaults to two retries for incomplete or invalid model replies. **Stream model responses** can be disabled for servers with unreliable streaming. Both modes validate the complete tool batch before dispatch. Long text files can be generated in numbered parts that stay unpublished until the final part succeeds. A regular replacement requires explicit overwrite and saves a backup. If a run stops before publication, start the write again in the same chat. Diagnostic logs record the response source, failure category and retry decision; the local audit shows whether a write was staged or published.
+
 The catalog contains curated popular families, not a measured popularity or performance ranking. Hardware figures assume typical quantized weights and are estimates: context, quantization and GPU offloading change requirements. CPU-only inference works but can be slow. Models without native tools work as chat models; select a tool-capable model for autonomous actions.
 
 ## Language, follow-ups and optional limits

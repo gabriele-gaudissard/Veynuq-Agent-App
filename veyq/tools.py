@@ -3,6 +3,7 @@ import difflib
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -19,6 +20,10 @@ try:
 except ImportError:
     BeautifulSoup = None
 from .network import public_request
+from .file_write import Draft, file_version, new_temp, publish, validate_write
+
+
+log = logging.getLogger(__name__)
 
 
 def schema(name, description, properties, required=()):
@@ -43,7 +48,7 @@ TOOLS = [
     schema("list_dir", "List workspace directory entries, without following links.", {"path": S}, ["path"]),
     schema("read_file", "Read UTF-8 text or BOM-marked UTF-16 text with line numbers; use pagination. Executables and other binary files are not text. Use read_document for PDF/DOCX and view_image for images.", {"path": S, "start_line": I, "end_line": I}, ["path"]),
     schema("search_files", "Search literal text recursively in workspace files; excludes secrets, dependencies and links.", {"query": S, "path": S}, ["query"]),
-    schema("write_file", "Create/replace a UTF-8 file. Existing content is backed up. Read before overwriting.", {"path": S, "content": S}, ["path", "content"]),
+    schema("write_file", "Create a UTF-8 file atomically with path and content. Omit part for a complete file. To replace an existing file, inspect it and set overwrite=true; its original is backed up. For long files send one small part per response: part=1 then increase by one. Numbered parts default to unpublished. final=false with no part also starts at part 1; only explicit final=true publishes a staged write. Each part is literal text. Use newline=lf or crlf when a trailing line break is needed; the tool adds it only when the content does not end in a line break. Only final=true publishes the file.", {"path": S, "content": {"type": "string"}, "overwrite": B, "part": {"type": "integer", "minimum": 1}, "final": B, "newline": {"type": "string", "enum": ["lf", "crlf"]}}, ["path", "content"]),
     schema("edit_file", "Replace one exact occurrence, with backup. Fails if old text is missing or ambiguous.", {"path": S, "old": S, "new": S}, ["path", "old", "new"]),
     schema("make_dir", "Create a workspace directory.", {"path": S}, ["path"]),
     schema("move_file", "Move/rename one file, no overwrite. Both paths need permission.", {"path": S, "destination": S}, ["path", "destination"]),
@@ -91,7 +96,7 @@ def linklike(path):
     return path.is_symlink() or bool(getattr(path.lstat(), "st_file_attributes", 0) & 0x400)
 
 
-def validate(value, spec, label="arguments"):
+def validate(value, spec, label="arguments", *, unbounded_text=None):
     kind = spec.get("type")
     correct = {"string": lambda x: isinstance(x, str), "boolean": lambda x: isinstance(x, bool), "integer": lambda x: isinstance(x, int) and not isinstance(x, bool),
                "object": lambda x: isinstance(x, dict), "array": lambda x: isinstance(x, list)}
@@ -107,13 +112,13 @@ def validate(value, spec, label="arguments"):
             raise ValueError(f"{label}: parametri mancanti.")
         for k, v in value.items():
             if k in props:
-                validate(v, props[k], k)
+                validate(v, props[k], k, unbounded_text=unbounded_text)
     if kind == "array":
         if len(value) > 30:
             raise ValueError("Troppi elementi.")
         for item in value:
             validate(item, spec["items"], label)
-    if isinstance(value, str) and len(value) > 200000:
+    if label != unbounded_text and isinstance(value, str) and len(value) > 200000:
         raise ValueError("Parametro troppo grande.")
 
 
@@ -146,13 +151,16 @@ class ToolRunner:
         self.child_clients = []
         self.child_agents = []
         self.plugin_tools = {}
+        self.file_drafts = {}
 
     def path(self, value):
         raw = Path(value)
         if os.name == "nt":
+            if raw.drive and not raw.is_absolute():
+                raise ValueError("Usa un percorso completo o relativo al progetto, senza lettera di unità relativa.")
             if str(raw).startswith(("\\\\", "//")) or ":" in str(raw)[2:]:
                 raise ValueError("Percorsi di rete, device e stream alternativi non ammessi.")
-            if any(part.rstrip(" .") != part or part.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))} for part in raw.parts[1:]):
+            if any(part.rstrip(" .") != part or part.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))} for part in raw.parts[bool(raw.anchor):]):
                 raise ValueError("Nome file Windows non ammesso.")
         target = (raw if raw.is_absolute() else self.workspace / raw).resolve()
         if sensitive(target) or target.is_relative_to(self.store.root.resolve()):
@@ -161,10 +169,10 @@ class ToolRunner:
             raise PermissionError('Coding workers cannot leave their isolated project copy.')
         return target
 
-    def backup(self, path):
+    def backup(self, path, max_size=5_000_000):
         if not path.is_file():
             return None
-        if path.stat().st_size > 5_000_000:
+        if max_size is not None and path.stat().st_size > max_size:
             raise ValueError("File oltre il limite di backup (5 MB).")
         key = uuid.uuid4().hex
         folder = self.store.root / "backups"
@@ -243,11 +251,25 @@ class ToolRunner:
             result['changes'] = self.sandbox.changes()
         if name == 'proposal_changes' and args.get('action') == 'apply':
             result['changes'] = self.tool_proposal_changes('review', args.get('proposal_id', ''))
-        if name in {"write_file", "edit_file"} and paths:
+        if name == "write_file" and paths:
+            if "part" not in args and args.get("final") is not False:
+                try:
+                    with paths[0].open(encoding="utf-8", errors="replace", newline="") as stream:
+                        before = stream.read(8001)
+                except FileNotFoundError:
+                    before = ""
+                after = args["content"][:8001]
+                if args.get("newline") and len(args["content"]) <= 8000 and not after.endswith(("\r", "\n")):
+                    after += "\r\n" if args["newline"] == "crlf" else "\n"
+                result["diff"] = "".join(difflib.unified_diff(before[:8000].splitlines(True), after[:8000].splitlines(True),
+                                                             fromfile=str(paths[0]), tofile=str(paths[0])))[:20000]
+                if len(before) > 8000 or len(args["content"]) > 8000:
+                    result["diff"] += "\n[Preview shortened.]"
+        if name == "edit_file" and paths:
             if paths[0].exists() and paths[0].stat().st_size > 500000:
                 raise ValueError("File troppo grande per l'anteprima (500 KB).")
             before = paths[0].read_text(encoding="utf-8") if paths[0].exists() else ""
-            after = args["content"] if name == "write_file" else before.replace(args["old"], args["new"], 1)
+            after = before.replace(args["old"], args["new"], 1)
             result["diff"] = "".join(difflib.unified_diff(before.splitlines(True), after.splitlines(True), fromfile=str(paths[0]), tofile=str(paths[0])))[:20000]
         return result
 
@@ -263,7 +285,9 @@ class ToolRunner:
                 raise PermissionError('This activity is read-only. Commands, mutations, online tools and desktop input are disabled.')
             if name not in SPECS:
                 raise ValueError(f"Strumento sconosciuto: {name}")
-            validate(args, SPECS[name])
+            validate(args, SPECS[name], unbounded_text="content" if name == "write_file" else None)
+            if name == "write_file":
+                validate_write(args)
             paths = [self.path(args[k]) for k in ("path", "destination", "cwd") if k in args]
             if self.settings.get('_read_only') and any(not p.is_relative_to(self.workspace) for p in paths):
                 raise PermissionError('Read-only activities cannot access files outside the selected project.')
@@ -272,7 +296,9 @@ class ToolRunner:
             if self.cancel.is_set():
                 raise RuntimeError("Operazione interrotta.")
             if needs:
-                before_hash = hashlib.sha256(paths[0].read_bytes()).hexdigest() if name in WRITE and paths and paths[0].is_file() else None
+                check_version = name in {"write_file", "edit_file"}
+                before_hash = file_version(paths[0]) if check_version else (
+                    hashlib.sha256(paths[0].read_bytes()).hexdigest() if name in WRITE and paths and paths[0].is_file() else None)
                 preview = self.preview(name, args, paths)
                 preview.update({"reason": reason, "digest": digest})
                 if not self.approve(preview):
@@ -285,7 +311,8 @@ class ToolRunner:
                 if name == 'proposal_changes' and args.get('action') == 'apply' and self.tool_proposal_changes('review', args.get('proposal_id', '')) != preview['changes']:
                     raise PermissionError('Coding proposal changed during approval; application cancelled.')
                 if name in WRITE and paths:
-                    after_hash = hashlib.sha256(paths[0].read_bytes()).hexdigest() if paths[0].is_file() else None
+                    after_hash = file_version(paths[0]) if check_version else (
+                        hashlib.sha256(paths[0].read_bytes()).hexdigest() if paths[0].is_file() else None)
                     if before_hash != after_hash:
                         raise PermissionError("File cambiato durante l'approvazione: azione annullata.")
             if self.cancel.is_set():
@@ -294,13 +321,28 @@ class ToolRunner:
             new_paths = [self.path(args[k]) for k in ("path", "destination", "cwd") if k in args]
             if new_paths != paths:
                 raise PermissionError("Percorso cambiato durante l'approvazione. Riprovare.")
-            self.emit("tool_start", {"tool": name, "arguments": args, "reason": reason})
+            display = args
+            if name == "write_file":
+                display = {key: value for key, value in args.items() if key != "content"}
+                display["characters"] = len(args["content"])
+            self.emit("tool_start", {"tool": name, "arguments": display, "reason": reason})
             result = getattr(self, "tool_" + name)(**args)
             failed = name in {"exec_cmd", "clone_repository", "git_status", "git_worktree"} and result.get("exit_code", 0) != 0 or name=='plugin_call' and bool(result.get('isError'))
             envelope = {"ok": not failed, "result": result}
             if failed:
                 envelope["error"] = "Tool failed. Inspect the actual result, fix the cause and retry; do not claim success."
-            self.store.audit(self.run_id, name, "failed" if failed else "completed", digest)
+            outcome = "failed" if failed else "completed"
+            if name == "write_file":
+                if not result["published"]:
+                    outcome = "staged"
+                elif not result["modified"]:
+                    outcome = "unchanged"
+            try:
+                self.store.audit(self.run_id, name, outcome, digest)
+            except OSError:
+                # The side effect already happened. Do not return a failure
+                # that could persuade the model to execute it a second time.
+                log.warning("Could not record tool outcome tool=%s outcome=%s", name, outcome)
             self.emit("tool_result", {"tool": name, "result": envelope})
             return envelope
         except Exception as e:
@@ -488,10 +530,16 @@ class ToolRunner:
         folder = self.store.root/'backups'
         metadata = json.loads((folder/(backup_id+'.json')).read_text(encoding='utf-8'))
         target = self.path(metadata['path'])
-        if (folder/backup_id).stat().st_size > 5_000_000: raise ValueError('Backup exceeds 5 MB.')
-        current = self.backup(target) if target.exists() else None
-        from .storage import atomic_bytes
-        atomic_bytes(target, (folder/backup_id).read_bytes())
+        expected = file_version(target)
+        temp = new_temp(target)
+        try:
+            with (folder/backup_id).open("rb") as source, temp.open("wb") as destination:
+                shutil.copyfileobj(source, destination)
+                destination.flush()
+                os.fsync(destination.fileno())
+            current = publish(temp, target, expected, lambda p: self.backup(p, max_size=None), self.cancel)
+        finally:
+            self._discard_draft(Draft(temp, expected, True))
         return {'restored': str(target), 'previous_content_backup': current}
 
     def tool_browser_open(self, url, visible=False):
@@ -634,29 +682,102 @@ class ToolRunner:
                     continue
         return {"matches": found, "truncated": False}
 
-    def tool_write_file(self, path, content):
-        target = self.path(path)
-        backup = self.backup(target)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent, delete=False) as f:
-            temp = Path(f.name)
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
+    def staged_writes(self):
+        return [{"path": str(target), "next_part": len(draft.parts) + 1} for target, draft in self.file_drafts.items()]
+
+    def _discard_draft(self, draft):
         try:
-            os.replace(temp, target)
+            draft.temp.unlink(missing_ok=True)
+        except OSError:
+            log.warning("Could not remove an unpublished write_file temporary file")
+
+    def discard_file_drafts(self):
+        for draft in self.file_drafts.values():
+            self._discard_draft(draft)
+        self.file_drafts.clear()
+
+    def _write_complete(self, target, data, expected):
+        if expected is not None and expected[-1] == hashlib.sha256(data).digest():
+            return {"path": str(target), "bytes": len(data), "backup": None, "published": True, "modified": False}
+        draft = Draft(new_temp(target), expected, expected is not None)
+        try:
+            size = draft.append(data)
+            backup = publish(draft.temp, target, expected, lambda p: self.backup(p, max_size=None), self.cancel)
         finally:
-            temp.unlink(missing_ok=True)
-        return {"path": str(target), "bytes": len(content.encode()), "backup": backup}
+            self._discard_draft(draft)
+        return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True}
+
+    def tool_write_file(self, path, content, overwrite=None, part=None, final=None, newline=None):
+        target = self.path(path)
+        data = content.encode("utf-8")
+        if newline and not data.endswith((b"\r", b"\n")):
+            data += b"\r\n" if newline == "crlf" else b"\n"
+        if part is None and final is False:
+            part = 1
+        if part is not None:
+            final = bool(final)
+        draft = self.file_drafts.get(target)
+        if part is None or draft is None:
+            # Worker copies already require explicit review before their
+            # changes can be applied to the real project.
+            if overwrite is None:
+                overwrite = bool(self.settings.get("_worker_tools"))
+            expected = file_version(target)
+            if expected is not None and not overwrite:
+                raise FileExistsError("Destination exists. Read it and use edit_file or explicitly set overwrite=true to replace it.")
+        if part is None:
+            if draft:
+                raise ValueError("A staged write exists for this file. Continue using its next part.")
+            return self._write_complete(target, data, expected)
+
+        if draft is None:
+            if part != 1:
+                raise ValueError("No staged write exists. Start with part 1.")
+            draft = Draft(new_temp(target), expected, overwrite)
+            self.file_drafts[target] = draft
+        elif overwrite and not draft.overwrite:
+            raise ValueError("Overwrite must be agreed in part 1.")
+
+        digest = hashlib.sha256(data).digest()
+        identity = (digest, final)
+        last = len(draft.parts)
+        if part <= last:
+            if draft.parts[part - 1] != identity:
+                raise ValueError(f"Part {part} is already staged with different text or final flag. Next part is {last + 1}.")
+        elif part == last + 1:
+            try:
+                draft.append(data)
+            except OSError:
+                # An interrupted append cannot be safely extended later.
+                self._discard_draft(self.file_drafts.pop(target))
+                raise
+            draft.parts.append(identity)
+        else:
+            raise ValueError(f"Expected part {last + 1}.")
+        size = draft.temp.stat().st_size
+        if not final:
+            return {"path": str(target), "staged_bytes": size, "next_part": len(draft.parts) + 1, "published": False}
+        try:
+            backup = publish(draft.temp, target, draft.expected, lambda p: self.backup(p, max_size=None), self.cancel)
+        finally:
+            self._discard_draft(self.file_drafts.pop(target))
+        return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True}
 
     def tool_edit_file(self, path, old, new):
         target = self.path(path)
-        if target.stat().st_size > 500000:
+        expected = file_version(target)
+        if expected is None:
+            raise FileNotFoundError("File da modificare non trovato.")
+        if expected[2] > 500000:
             raise ValueError("Usa un file sotto 500 KB per edit_file.")
-        before = target.read_text(encoding="utf-8")
+        with target.open(encoding="utf-8", newline="") as stream:
+            before = stream.read()
+        # Existing callers often supply LF from read_file even on CRLF files.
+        if old and before.count(old) != 1 and "\r\n" in before and "\r" not in old + new:
+            old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
         if not old or before.count(old) != 1:
             raise ValueError("Il testo da sostituire deve comparire esattamente una volta.")
-        return self.tool_write_file(path, before.replace(old, new, 1))
+        return self._write_complete(target, before.replace(old, new, 1).encode("utf-8"), expected)
 
     def tool_make_dir(self, path):
         target = self.path(path)
@@ -689,7 +810,9 @@ class ToolRunner:
             else:
                 os.killpg(proc.pid, signal.SIGKILL)
 
-    def close(self):
+    def close(self, *, discard_drafts=True):
+        if discard_drafts:
+            self.discard_file_drafts()
         self.stop_process()
         self.sandbox.stop()
         from .engine import interrupt_response

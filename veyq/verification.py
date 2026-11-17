@@ -36,6 +36,8 @@ class Verification:
     def observe(self, name, args, result):
         if not result.get('ok'): return
         value = result.get('result', {})
+        if name == 'write_file' and value.get('published') is False:
+            return
         # Inspections discharge only relevant observations, never unrelated work.
         if name in {'read_file', 'read_document', 'view_image', 'inspect_binary'}:
             target = self.path(args['path'])
