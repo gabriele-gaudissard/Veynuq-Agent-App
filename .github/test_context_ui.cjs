@@ -24,6 +24,19 @@ return (async () => {
     const saved = calls.find(row => row[0] === "saveSettings")[1];
     assert.equal(saved.min_response_tokens, 1536);
     assert.equal(saved.context_threshold, 75);
+    await w.loadSession("demo");
+    const overview = await api.get_task_overview("demo");
+    api.get_task_overview = async () => ({...overview, task: {
+      state: "partial", goal: "Create two files", operations: [
+        {tool:"write_file", target:"a.py", state:"completed"},
+        {tool:"write_file", target:"b.py", state:"failed"},
+      ],
+    }});
+    await w.showTaskCenter();
+    const progress = document.getElementById("taskProgress").textContent;
+    assert.match(progress, /a.py.*Verified/);
+    assert.match(progress, /b.py.*Failed/);
+    assert.equal(document.getElementById("resumeTask").disabled, false);
     w.showContextUsage(null);
     assert.equal(label.hidden, true);
     console.log("Context indicator and persistent settings checks passed.");

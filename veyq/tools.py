@@ -698,14 +698,15 @@ class ToolRunner:
 
     def _write_complete(self, target, data, expected):
         if expected is not None and expected[-1] == hashlib.sha256(data).digest():
-            return {"path": str(target), "bytes": len(data), "backup": None, "published": True, "modified": False}
+            return {"path": str(target), "bytes": len(data), "backup": None, "published": True, "modified": False, "sha256": hashlib.sha256(data).hexdigest()}
         draft = Draft(new_temp(target), expected, expected is not None)
         try:
             size = draft.append(data)
             backup = publish(draft.temp, target, expected, lambda p: self.backup(p, max_size=None), self.cancel)
         finally:
             self._discard_draft(draft)
-        return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True}
+        return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True,
+                "sha256": hashlib.sha256(data).hexdigest()}
 
     def tool_write_file(self, path, content, overwrite=None, part=None, final=None, newline=None):
         target = self.path(path)
@@ -757,11 +758,14 @@ class ToolRunner:
         size = draft.temp.stat().st_size
         if not final:
             return {"path": str(target), "staged_bytes": size, "next_part": len(draft.parts) + 1, "published": False}
+        with draft.temp.open("rb") as stream:
+            content_hash = hashlib.file_digest(stream, "sha256").hexdigest()
         try:
             backup = publish(draft.temp, target, draft.expected, lambda p: self.backup(p, max_size=None), self.cancel)
         finally:
             self._discard_draft(self.file_drafts.pop(target))
-        return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True}
+        return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True,
+                "sha256": content_hash}
 
     def tool_edit_file(self, path, old, new):
         target = self.path(path)

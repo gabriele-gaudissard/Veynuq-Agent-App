@@ -1,5 +1,24 @@
 """Persist observations still needed for each actual mutation, across turns."""
+import hashlib
+import logging
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+
+
+def verify_file(path, expected_size, expected_hash):
+    try:
+        with path.open("rb") as stream:
+            actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            size = stream.tell()
+        if size != expected_size or actual != expected_hash:
+            log.warning("File verification failed category=%s", "size_mismatch" if size != expected_size else "content_mismatch")
+            return False
+        return True
+    except OSError as error:
+        log.warning("File verification failed category=%s", type(error).__name__)
+        return False
+
 
 
 class Verification:
@@ -13,6 +32,12 @@ class Verification:
     def add(self, kind, target):
         entry = {'kind': kind, 'target': target}
         if entry not in self.pending: self.pending.append(entry)
+
+    def confirm(self, result):
+        value = result.get("result", {})
+        if not isinstance(value, dict) or not value.get("sha256") or not value.get("path"):
+            return False
+        return verify_file(self.runner.path(value["path"]), value["bytes"], value["sha256"])
 
     def observations(self, enabled):
         """Bounded read-only recovery for known targets; normal tool gates apply."""
@@ -61,7 +86,17 @@ class Verification:
         if relevant:
             self.pending = [p for p in self.pending if p['kind'] != 'project']
         if name in {'write_file', 'edit_file', 'download_file'}:
-            self.add('file', self.path(args['path']))
+            target = self.path(args['path'])
+            self.add('file', target)
+            # Hashes are emitted by the backend writer after atomic publication.
+            # Read-back is part of validating the authorized write.
+            if (name in {'write_file', 'edit_file'} and isinstance(value, dict)
+                    and value.get('published') is True and isinstance(value.get('sha256'), str)):
+                verified = verify_file(self.runner.path(args['path']), value['bytes'], value['sha256'])
+                result['verification'] = {'state': 'completed' if verified else 'unverified', 'evidence': 'file_readback_sha256'}
+                log.info("File verification tool=%s verified=%s", name, verified)
+                if verified:
+                    self.pending = [p for p in self.pending if not (p['kind'] == 'file' and p['target'] == target)]
         elif name == 'make_dir': self.add('directory', self.path(args['path']))
         elif name == 'delete_file': self.add('missing', self.path(args['path']))
         elif name == 'move_file':

@@ -648,6 +648,11 @@ async function poll() {
           );
           break;
         }
+        case "operation":
+          activity(d.operation.tool + " · " + ui(d.operation.state === "completed" ? "Verified" :
+            d.operation.state === "failed" ? "Failed" : d.operation.state === "staged" ? "Draft part saved" : "Unverified"),
+            d.operation, d.operation.state === "completed" ? "success" : d.operation.state === "failed" ? "error" : "info");
+          break;
         case "plan":
           renderPlan(d.steps);
           break;
@@ -706,6 +711,9 @@ async function poll() {
             cancelled: "Interrotto",
             limit: "Limite raggiunto",
             incomplete: ui("Partial response"),
+            unverified: ui("Unverified"),
+            partial: ui("Partially completed"),
+            blocked: ui("Blocked"),
           }[result.state] || "Pronto",
     );
     if (result.approval) showApproval(result.approval);
@@ -726,8 +734,11 @@ async function showTaskCenter() {
   const overview = await call('get_task_overview', sessionId);
   const task = overview.task;
   $('taskProgress').textContent = task.state ? [ui('Task state') + ': ' + ui(task.state), task.goal, task.progress, task.next_steps].filter(Boolean).join('\n\n') : ui('No saved task progress yet.');
+  if (task.operations?.length)
+    $('taskProgress').textContent += "\n\n" + task.operations.map(row => row.tool + (row.target ? " · " + row.target : "") + " · " +
+      ui(row.recovered ? "Recovered" : row.state === "completed" ? "Verified" : row.state === "failed" ? "Failed" : row.state === "staged" ? "Draft part saved" : "Unverified")).join("\n");
   if (task.verification?.length) $('taskProgress').textContent += '\n\n' + ui('Pending observations: {count}').replace('{count}', task.verification.length);
-  $('resumeTask').disabled = busy || !['interrupted','failed','cancelled','limit','unverified','blocked'].includes(task.state);
+  $('resumeTask').disabled = busy || !['interrupted','failed','cancelled','limit','unverified','blocked','partial','incomplete'].includes(task.state);
   $('prepareWindowsSandbox').disabled = busy;
   $('isolationStatus').textContent = ui(overview.windows_sandbox_available ? 'Windows Sandbox launcher is available; Windows feature and virtualization requirements still apply.' : 'Windows Sandbox is unavailable on this installation. Preparation does not enable Windows features.') + ' ' + ui(overview.background_enabled ? 'Background schedules are enabled for this user.' : 'Background schedules are disabled.');
   $('generatedArtifacts').replaceChildren();

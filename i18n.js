@@ -3184,6 +3184,14 @@ window.VeyqI18N = (() => {
     return dictionaries.legacy[text] || text;
   }
   Object.assign(dictionaries.strings, {
+    "Verified": {it: "Verificato", es: "Verificado", fr: "Vérifié"},
+    "Unverified": {it: "Non verificato", es: "Sin verificar", fr: "Non vérifié"},
+    "Failed": {it: "Fallito", es: "Fallido", fr: "Échec"},
+    "Recovered": {it: "Recuperato", es: "Recuperado", fr: "Rétabli"},
+    "Blocked": {it: "Bloccato", es: "Bloqueado", fr: "Bloqué"},
+    "Partially completed": {it: "Completato parzialmente", es: "Completado parcialmente", fr: "Partiellement terminé"},
+    "Maximum steps (0 = 1000)": {it: "Passaggi massimi (0 = 1000)", es: "Pasos máximos (0 = 1000)", fr: "Étapes maximales (0 = 1000)"},
+    "Step limit: 0 uses the 1000-step safety limit; otherwise choose 1–1000.": {it: "0 usa il limite di 1.000 passaggi. Puoi scegliere da 1 a 1.000.", es: "0 usa el límite de 1.000 pasos. Puedes elegir de 1 a 1.000.", fr: "0 utilise la limite de 1 000 étapes. Choisissez de 1 à 1 000."},
     "Context": {it: "Contesto", es: "Contexto", fr: "Contexte"},
     "Estimated": {it: "Stimato", es: "Estimado", fr: "Estimé"},
     "Observed": {it: "Misurato", es: "Medido", fr: "Mesuré"},

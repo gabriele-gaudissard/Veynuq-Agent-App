@@ -22,6 +22,7 @@ def startup_log():
     stream = path.open("a", encoding="utf-8", buffering=1)
     logging.basicConfig(stream=stream, level=logging.WARNING)
     logging.getLogger("veyq.generation").setLevel(logging.INFO)
+    logging.getLogger("veyq.engine").setLevel(logging.INFO)
     if sys.stderr is None:
         sys.stderr = stream
     if sys.stdout is None:

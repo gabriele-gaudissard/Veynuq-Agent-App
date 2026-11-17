@@ -108,3 +108,41 @@ def generation_message(lang, reason, partial=False):
         "continuing": 5, "no_progress": 6, "structured": 7, "backend": 8,
     }.get(reason, 8)
     return messages[index] + (" " + messages[9] if partial else "")
+
+
+def completion_message(lang, category):
+    messages = {
+        "en": {
+            "no_tool_call": "The model did not produce an action call needed to finish this request after the recovery attempts. The tool results show what was actually performed.",
+            "empty_response": "The model returned an empty response after the recovery attempts. Review the saved operation results before continuing.",
+            "partial": "Some operations failed. The operation results show the completed and failed steps. Inspect them before retrying.",
+            "failed": "The requested operation failed. Check its result for the specific cause.",
+            "unverified": "Actions were performed, but final verification was not completed. Inspect the pending targets before considering the task finished.",
+            "limit": "The activity reached its iteration limit. Completed work was preserved. Resume to continue from the recorded results.",
+        },
+        "it": {
+            "no_tool_call": "Il modello non ha prodotto la chiamata operativa necessaria per completare questa richiesta dopo i tentativi di recupero. I risultati degli strumenti mostrano ciò che è stato effettivamente eseguito.",
+            "empty_response": "Il modello ha restituito una risposta vuota dopo i tentativi di recupero. Controlla i risultati salvati delle operazioni prima di continuare.",
+            "partial": "Alcune operazioni sono fallite. Nei risultati trovi i passaggi completati e quelli falliti. Controllali prima di riprovare.",
+            "failed": "L’operazione richiesta è fallita. Il risultato indica la causa specifica.",
+            "unverified": "Sono state eseguite azioni, ma la verifica finale non è stata completata. Controlla gli elementi in attesa prima di considerare concluso il lavoro.",
+            "limit": "L’attività ha raggiunto il limite di iterazioni. Il lavoro completato è conservato. Riprendi per proseguire dai risultati registrati.",
+        },
+        "es": {
+            "no_tool_call": "El modelo no generó una llamada de acción para esta solicitud tras los intentos de recuperación. Los resultados muestran las operaciones realizadas.",
+            "empty_response": "El modelo devolvió una respuesta vacía tras los intentos de recuperación. Revisa los resultados guardados antes de continuar.",
+            "partial": "Algunas operaciones fallaron. Los resultados indican los pasos completados y fallidos. Revísalos antes de reintentar.",
+            "failed": "La operación solicitada falló. El resultado indica la causa específica.",
+            "unverified": "Se realizaron acciones, pero la verificación final está pendiente. Revisa los objetivos pendientes antes de dar la tarea por terminada.",
+            "limit": "La actividad alcanzó el límite de iteraciones. El trabajo completado se conservó. Reanuda desde los resultados registrados.",
+        },
+        "fr": {
+            "no_tool_call": "Le modèle n’a pas produit d’appel d’action après les tentatives de récupération. Les résultats indiquent les opérations réellement exécutées.",
+            "empty_response": "Le modèle a renvoyé une réponse vide après les tentatives de récupération. Vérifiez les résultats enregistrés avant de continuer.",
+            "partial": "Certaines opérations ont échoué. Les résultats indiquent les étapes terminées et celles en échec. Vérifiez-les avant de réessayer.",
+            "failed": "L’opération demandée a échoué. Le résultat précise la cause.",
+            "unverified": "Des actions ont été effectuées, mais leur vérification finale reste en attente. Vérifiez les cibles concernées avant de terminer.",
+            "limit": "L’activité a atteint la limite d’itérations. Le travail effectué est conservé. Reprenez depuis les résultats enregistrés.",
+        },
+    }
+    return messages.get(lang, messages["en"]).get(category, messages["en"]["failed"])
