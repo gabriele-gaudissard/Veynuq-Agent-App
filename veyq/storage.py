@@ -22,6 +22,7 @@ DEFAULTS = {
     "image_provider": "managed", "image_url": "http://127.0.0.1:7860", "image_model": "",
     "context_tokens": 16384, "response_tokens": 4096, "tool_retries": 2, "model_streaming": True,
     "text_continuations": 3, "compatible_limit_field": "server",
+    "min_response_tokens": 1024, "context_threshold": 80,
     "collapsed_projects": [],
     "disabled_tools": [],
 }

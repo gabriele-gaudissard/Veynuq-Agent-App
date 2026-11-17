@@ -38,6 +38,20 @@ def model_response_message(lang, reason, tool=""):
 
 
 def generation_message(lang, reason, partial=False):
+    if reason in {"input_too_large", "compacting"}:
+        messages = {
+            "en": ("The current request and required instructions exceed the available context. Original messages were preserved. Split the input at meaningful sections or raise the configured context if supported.",
+                   "Optimizing conversation memory to fit the available context…"),
+            "it": ("La richiesta corrente e le istruzioni necessarie superano lo spazio disponibile. I messaggi originali sono conservati. Dividi il contenuto in sezioni coerenti o aumenta il contesto configurato se supportato.",
+                   "Ottimizzo la memoria della conversazione per il contesto disponibile…"),
+            "es": ("La solicitud actual y las instrucciones necesarias superan el contexto disponible. Los mensajes originales se conservaron. Divide la entrada en secciones coherentes o amplía el contexto si es compatible.",
+                   "Optimizando la memoria de la conversación para el contexto disponible…"),
+            "fr": ("La demande actuelle et les instructions nécessaires dépassent le contexte disponible. Les messages originaux sont conservés. Divisez le contenu en sections cohérentes ou augmentez le contexte si possible.",
+                   "Optimisation de la mémoire de conversation pour le contexte disponible…"),
+        }.get(lang)
+        if messages is None:
+            return generation_message("en", reason, partial)
+        return messages[0 if reason == "input_too_large" else 1]
     localized = {
         "en": (
             "The response reached the output limit.",

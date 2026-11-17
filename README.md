@@ -25,6 +25,16 @@ HTTPS downloads use the Windows certificate trust store through truststore, incl
 
 Python installation now displays the official installer's real progress bar in unattended `/passive` mode. The Python download also keeps progress visible. An existing up-to-date installation is still skipped. To retry an interrupted 4.6.0 setup, download the current `Veynuq-Setup.exe` and run it again: existing chats/settings and completed verified downloads are preserved. Setup diagnostics are retained in `setup-install.log` in the application folder.
 
+## Conversation context management in 4.6.3
+
+Every model request now budgets the complete prompt, including system instructions, tools, task status, images and recovery instructions. **Compact context at (%)** defaults to 80. **Minimum response reserve** defaults to 1,024 tokens. Older exchanges are replaced in the model input by structured source excerpts covering the goal, constraints, technical references and observed results. Original messages stay in the local transcript. The separate conversation memory is committed only after the compacted request fits.
+
+The context indicator identifies estimated, tokenizer-counted and observed input usage. Local Ollama uses a calibrated estimate and checks the running model context when available. A directly configured loopback llama.cpp endpoint can expose its per-slot capacity and chat-template tokenizer. External server settings are read through supported endpoints.
+
+The current human request and system instructions remain intact. If these alone exceed the available context, Veynuq reports that the input needs coherent sections. Code and structured data require meaningful boundaries. A backend context rejection gets one bounded re-budgeting attempt. Insufficient GPU memory is reported separately.
+
+For the tested Qwen3.5 9B Q8_0 and 16 GB RTX 4080 Super, 32,768 context tokens is an available starting choice for long work. A 65,536-token context was also loaded and checked with a short response, which is a narrower test than a full-window workload. Existing context settings are preserved. Each model's supported context and the available GPU memory still apply.
+
 ## Longer generation and tool reliability in 4.6.2
 
 A local response can be configured for 512 to 16,384 output tokens. The actual per-response limit reflects available space in the selected context. For a 16 GB RTX 4080 Super with the Qwen3.5 9B Q8_0 model, start with a 16,384-token context and try 8,192 response tokens for long work. Larger contexts consume more KV-cache memory. Compatible APIs use server defaults unless you select the output limit field that the endpoint supports.

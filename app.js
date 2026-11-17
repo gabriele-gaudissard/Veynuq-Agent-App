@@ -418,6 +418,19 @@ function renderSessions() {
     host.append(details);
   }
 }
+function showContextUsage(stats) {
+  const label = $("contextUsage");
+  if (!stats?.capacity) {
+    label.hidden = true;
+    return;
+  }
+  label.hidden = false;
+  const number = value => Number(value || 0).toLocaleString(settings.lang || "en");
+  const method = stats.method === "estimate" ? ui("Estimated") : stats.method === "observed" ? ui("Observed") : ui("Tokenizer");
+  label.textContent = ui("Context") + " " + number(stats.input) + " / " + number(stats.capacity) + " (" + Math.round(100 * stats.input / stats.capacity) + "%) · " + method;
+  label.title = ui("Response reserve") + ": " + number(stats.reserved) + "\n" + ui("Free space") + ": " + number(stats.free) + "\n" + ui("Last compaction") + ": " + (stats.last_compaction ? new Date(stats.last_compaction * 1000).toLocaleString(settings.lang || "en") : "—");
+}
+
 async function loadSession(id) {
   if (voiceActive && id !== voiceSession) await cancelDictation();
   const request = ++sessionLoad;
@@ -433,6 +446,7 @@ async function loadSession(id) {
       message(m.role, m.content, index, !!m.incomplete);
   }
   showWorkspace(s.workspace || settings.workspace);
+  showContextUsage(s.context_stats);
   $("projectAssignment").replaceChildren();
   for (const project of [{ id: "", name: ui("No project") }, ...projects]) {
     const option = document.createElement("option");
@@ -459,6 +473,7 @@ function updateChatActions() {
   $("exportChat").disabled = !sessionId;
 }
 function emptyChat() {
+  showContextUsage(null);
   ++sessionLoad;
   sessionId = "";
   streamNode = null;
@@ -575,6 +590,9 @@ async function poll() {
       if (e.type === "done") await refreshSessions();
       if (e.session_id && e.session_id !== sessionId) continue;
       switch (e.type) {
+        case "context":
+          showContextUsage(d);
+          break;
         case "text":
           if (!streamNode) {
             streamNode = message("assistant", "");
@@ -931,6 +949,8 @@ async function showSettings() {
     ['imageProvider','image_provider'],['imageEndpoint','image_url'],['imageModel','image_model'],
   ])
     $(id).value = settings[key];
+  $("minResponseTokens").value = settings.min_response_tokens ?? 1024;
+  $("contextThreshold").value = settings.context_threshold ?? 80;
   $("textContinuations").value = settings.text_continuations ?? 3;
   $("compatibleLimitField").value = settings.compatible_limit_field ?? "server";
   $("toolRetries").value = settings.tool_retries ?? 2;
@@ -1129,6 +1149,7 @@ async function saveSettings() {
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),
     tool_retries:Number($('toolRetries').value),model_streaming:$('modelStreaming').checked,
     text_continuations:Number($('textContinuations').value),compatible_limit_field:$('compatibleLimitField').value,
+    min_response_tokens:Number($('minResponseTokens').value),context_threshold:Number($('contextThreshold').value),
     background_schedules:$('backgroundSchedules').checked,
     image_provider:$('imageProvider').value,image_url:$('imageEndpoint').value.trim(),image_model:$('imageModel').value.trim(),image_token:$('imageToken').value,
     provider_token: $("providerToken").value,

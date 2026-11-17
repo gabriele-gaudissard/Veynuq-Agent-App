@@ -37,6 +37,7 @@ jobs:
       - run: node --check app.js
       - run: npm ci --no-audit --no-fund
       - run: npm test
+      - run: node .github/test_context_ui.cjs
 
   sandbox-test:
     runs-on: ubuntu-latest
@@ -112,5 +113,5 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --clobber
           else
-            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.2 · ${BUILD_SHA:0:7}" --notes "This release adds controlled text continuation, context-aware response limits and safer tool calls. Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
+            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.3 · ${BUILD_SHA:0:7}" --notes "This release budgets complete prompts, compacts conversation memory and shows effective context usage. Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
           fi

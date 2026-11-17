@@ -3184,6 +3184,17 @@ window.VeyqI18N = (() => {
     return dictionaries.legacy[text] || text;
   }
   Object.assign(dictionaries.strings, {
+    "Context": {it: "Contesto", es: "Contexto", fr: "Contexte"},
+    "Estimated": {it: "Stimato", es: "Estimado", fr: "Estimé"},
+    "Observed": {it: "Misurato", es: "Medido", fr: "Mesuré"},
+    "Tokenizer": {it: "Tokenizer", es: "Tokenizador", fr: "Tokeniseur"},
+    "Minimum response reserve": {it: "Riserva minima per la risposta", es: "Reserva mínima para la respuesta", fr: "Réserve minimale de réponse"},
+    "Response reserve": {it: "Riserva per la risposta", es: "Reserva de respuesta", fr: "Réserve de réponse"},
+    "Free space": {it: "Spazio libero", es: "Espacio libre", fr: "Espace libre"},
+    "Last compaction": {it: "Ultima compattazione", es: "Última compactación", fr: "Dernière compression"},
+    "Compact context at (%)": {it: "Compatta il contesto al (%)", es: "Compactar el contexto al (%)", fr: "Compacter le contexte à (%)"},
+    "Minimum response reserve must be between 128 and 8192.": {it: "La riserva minima deve essere tra 128 e 8.192 token.", es: "La reserva mínima debe estar entre 128 y 8.192 tokens.", fr: "La réserve minimale doit être comprise entre 128 et 8 192 tokens."},
+    "Context compaction threshold must be between 50 and 95.": {it: "La soglia di compattazione deve essere tra il 50% e il 95%.", es: "El umbral de compactación debe estar entre el 50% y el 95%.", fr: "Le seuil de compression doit être compris entre 50 % et 95 %."},
     "Partial response": {it: "Risposta parziale", es: "Respuesta parcial", fr: "Réponse partielle"},
     "Automatic text continuations": {it: "Continuazioni automatiche del testo", es: "Continuaciones automáticas de texto", fr: "Suites automatiques du texte"},
     "0 disables continuation. Applies to plain text.": {it: "0 disattiva la continuazione. Si applica al testo libero.", es: "0 desactiva la continuación. Se aplica al texto libre.", fr: "0 désactive la suite. S’applique au texte libre."},

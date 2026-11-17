@@ -53,7 +53,7 @@ class GenerationTests(unittest.TestCase):
                 self.assertLogs("veyq.generation", level=logging.INFO) as metrics:
             message = client.chat(MESSAGES)
         self.assertEqual(message, {"role": "assistant", "content": "Rome."})
-        self.assertIn("output=2 context=16384 output_budget=4096", metrics.output[0])
+        self.assertTrue(any("output=2 context=16384 output_budget=4096" in line for line in metrics.output))
         self.assertEqual(post.call_args.kwargs["json"]["options"],
                          {"num_ctx": 16384, "num_predict": 4096, "temperature": .15})
 
@@ -83,7 +83,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(options["num_ctx"], 8192)
         self.assertLess(options["num_predict"], 8192)
         with patch.object(client.session, "post") as post, self.assertLogs("veyq.engine"):
-            with self.assertRaisesRegex(RuntimeError, "little room"):
+            with self.assertRaisesRegex(RuntimeError, "current request"):
                 client.chat([{"role": "user", "content": "example " * 5000}])
             post.assert_not_called()
 
@@ -181,7 +181,7 @@ class GenerationTests(unittest.TestCase):
                     status_code=500, text=json.dumps({"error": detail}))) as post, self.assertLogs("veyq.engine"):
                 with self.assertRaisesRegex(RuntimeError, user_message):
                     client.chat(MESSAGES)
-                post.assert_called_once()
+                self.assertEqual(post.call_count, 2 if "context" in detail else 1)
 
     def test_long_history_is_compacted_without_mutating_saved_messages(self):
         messages = [{"role": "user", "content": "Earlier requirements " + "a" * 3000},
