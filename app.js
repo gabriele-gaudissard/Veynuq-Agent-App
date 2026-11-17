@@ -196,13 +196,13 @@ function renderText(parent, text) {
     code.parentElement.prepend(button);
   }
 }
-function message(role, text, historyIndex = null) {
+function message(role, text, historyIndex = null, incomplete = false) {
   $("welcome").hidden = true;
   const box = document.createElement("article");
   box.className = "message " + role;
   const label = document.createElement("div");
   label.className = "message-label";
-  label.textContent = role === "user" ? "Tu" : "Veynuq";
+  label.textContent = role === "user" ? "Tu" : incomplete ? "Veynuq · " + ui("Partial response") : "Veynuq";
   const body = document.createElement("div");
   body.className = "message-body";
   box.dataset.raw = text;
@@ -430,7 +430,7 @@ async function loadSession(id) {
   $("welcome").hidden = s.history.some((m) => m.role === "user");
   for (const [index, m] of s.history.entries()) {
     if (["user", "assistant"].includes(m.role) && m.content)
-      message(m.role, m.content, index);
+      message(m.role, m.content, index, !!m.incomplete);
   }
   showWorkspace(s.workspace || settings.workspace);
   $("projectAssignment").replaceChildren();
@@ -561,6 +561,7 @@ async function poll() {
   try {
     const result = await call("get_events", lastSeq);
     activeSession = result.session_id || activeSession;
+    let draftChanged = false;
     for (const e of result.events) {
       lastSeq = e.seq;
       const d = e.data;
@@ -580,8 +581,7 @@ async function poll() {
             streamText = "";
           }
           streamText += d.text;
-          renderText(streamNode, streamText);
-          scrollBottom();
+          draftChanged = true;
           break;
         case "discard_text":
           streamNode?.closest(".message")?.remove();
@@ -592,8 +592,10 @@ async function poll() {
           if (d.message.content) {
             if (streamNode) {
               renderText(streamNode, d.message.content);
+              if (d.message.incomplete)
+                streamNode.closest(".message").querySelector(".message-label").textContent = "Veynuq · " + ui("Partial response");
             } else
-              message("assistant", d.message.content, d.history_index ?? null);
+              message("assistant", d.message.content, d.history_index ?? null, !!d.message.incomplete);
           } else {
             streamNode?.closest(".message")?.remove();
             streamNode = null;
@@ -666,6 +668,10 @@ async function poll() {
           break;
       }
     }
+    if (draftChanged && streamNode) {
+      renderText(streamNode, streamText);
+      scrollBottom();
+    }
     setBusy(
       result.busy,
       result.busy
@@ -681,6 +687,7 @@ async function poll() {
             failed: "Errore",
             cancelled: "Interrotto",
             limit: "Limite raggiunto",
+            incomplete: ui("Partial response"),
           }[result.state] || "Pronto",
     );
     if (result.approval) showApproval(result.approval);
@@ -924,6 +931,8 @@ async function showSettings() {
     ['imageProvider','image_provider'],['imageEndpoint','image_url'],['imageModel','image_model'],
   ])
     $(id).value = settings[key];
+  $("textContinuations").value = settings.text_continuations ?? 3;
+  $("compatibleLimitField").value = settings.compatible_limit_field ?? "server";
   $("toolRetries").value = settings.tool_retries ?? 2;
   $("modelStreaming").checked = settings.model_streaming !== false;
   $("network").checked = settings.network;
@@ -1119,6 +1128,7 @@ async function saveSettings() {
     desktop_scope:$('desktopScope').value || 'all',
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),
     tool_retries:Number($('toolRetries').value),model_streaming:$('modelStreaming').checked,
+    text_continuations:Number($('textContinuations').value),compatible_limit_field:$('compatibleLimitField').value,
     background_schedules:$('backgroundSchedules').checked,
     image_provider:$('imageProvider').value,image_url:$('imageEndpoint').value.trim(),image_model:$('imageModel').value.trim(),image_token:$('imageToken').value,
     provider_token: $("providerToken").value,

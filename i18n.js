@@ -3184,6 +3184,15 @@ window.VeyqI18N = (() => {
     return dictionaries.legacy[text] || text;
   }
   Object.assign(dictionaries.strings, {
+    "Partial response": {it: "Risposta parziale", es: "Respuesta parcial", fr: "Réponse partielle"},
+    "Automatic text continuations": {it: "Continuazioni automatiche del testo", es: "Continuaciones automáticas de texto", fr: "Suites automatiques du texte"},
+    "0 disables continuation. Applies to plain text.": {it: "0 disattiva la continuazione. Si applica al testo libero.", es: "0 desactiva la continuación. Se aplica al texto libre.", fr: "0 désactive la suite. S’applique au texte libre."},
+    "Per response. Available context can lower this limit.": {it: "Per risposta. Lo spazio nel contesto può ridurre il limite.", es: "Por respuesta. El espacio del contexto puede reducir el límite.", fr: "Par réponse. L’espace de contexte disponible peut réduire cette limite."},
+    "Output limit for compatible APIs": {it: "Limite di risposta per API compatibili", es: "Límite de respuesta para API compatibles", fr: "Limite de réponse pour les API compatibles"},
+    "Server default": {it: "Predefinito del server", es: "Predeterminado del servidor", fr: "Valeur par défaut du serveur"},
+    "Response tokens must be between 512 and 16384.": {it: "I token di risposta devono essere tra 512 e 16.384.", es: "Los tokens de respuesta deben estar entre 512 y 16.384.", fr: "Le nombre de tokens de réponse doit être compris entre 512 et 16 384."},
+    "Text continuations must be between 0 and 8.": {it: "Le continuazioni devono essere tra 0 e 8.", es: "Las continuaciones deben estar entre 0 y 8.", fr: "Le nombre de suites doit être compris entre 0 et 8."},
+    "Unknown compatible API output limit.": {it: "Parametro di limite dell’API compatibile sconosciuto.", es: "Parámetro de límite de API compatible desconocido.", fr: "Paramètre de limite de l’API compatible inconnu."},
     "Draft part saved": {it: "Parte della bozza salvata", es: "Parte del borrador guardada", fr: "Partie du brouillon enregistrée"},
     "Tool recovery attempts": {it: "Tentativi di recupero degli strumenti", es: "Intentos de recuperación de herramientas", fr: "Tentatives de récupération des outils"},
     "Stream model responses": {it: "Mostra le risposte man mano che vengono generate", es: "Mostrar las respuestas a medida que se generan", fr: "Afficher les réponses au fil de leur génération"},

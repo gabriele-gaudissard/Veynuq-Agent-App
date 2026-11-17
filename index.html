@@ -48,7 +48,7 @@
           ><button id="memory">◇ Local memory</button
           ><button id="toolsButton">⌘ Tools</button
           ><button id="settingsButton">⚙ Settings</button>
-          <div class="sub">Desktop agent · v4.6.1<br />No telemetry</div>
+          <div class="sub">Desktop agent · v4.6.2<br />No telemetry</div>
         </div>
       </aside>
       <main>
@@ -436,7 +436,9 @@
             <div class="grid">
               <label class="field">Desktop target<select id="desktopScope"><option value="all">Available Windows applications</option><option value="sandbox">Windows Sandbox only</option></select><small>This restricts mouse and keyboard targets. File tools and commands keep their own workspace and execution permissions.</small></label>
               <label class="field">Context capacity (tokens)<input id="contextTokens" type="number" min="8192" max="65536" step="1024" value="16384" /><small>Higher context uses more memory. The installed model limit is respected.</small></label>
-              <label class="field">Maximum response tokens<input id="responseTokens" type="number" min="512" max="8192" step="512" value="4096" /></label>
+              <label class="field">Maximum response tokens<input id="responseTokens" type="number" min="512" max="16384" step="512" value="4096" /><small>Per response. Available context can lower this limit.</small></label>
+              <label class="field">Automatic text continuations<input id="textContinuations" type="number" min="0" max="8" step="1" value="3" /><small>0 disables continuation. Applies to plain text.</small></label>
+              <label class="field">Output limit for compatible APIs<select id="compatibleLimitField"><option value="server">Server default</option><option value="max_tokens">max_tokens</option><option value="max_completion_tokens">max_completion_tokens</option></select></label>
               <label class="field">Tool recovery attempts<input id="toolRetries" type="number" min="0" max="3" step="1" value="2" /></label>
               <label class="check"><input id="modelStreaming" type="checkbox" checked /> <span>Stream model responses</span></label>
               <label class="check full-width"><input id="backgroundSchedules" type="checkbox" /><span>Run read-only schedules while the app is closed<small>Creates a visible Windows scheduled task for this signed-in user, without administrator rights. Checks every five minutes; opening Veynuq stops the worker. Nothing runs while signed out.</small></span></label>

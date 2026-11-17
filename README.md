@@ -25,6 +25,14 @@ HTTPS downloads use the Windows certificate trust store through truststore, incl
 
 Python installation now displays the official installer's real progress bar in unattended `/passive` mode. The Python download also keeps progress visible. An existing up-to-date installation is still skipped. To retry an interrupted 4.6.0 setup, download the current `Veynuq-Setup.exe` and run it again: existing chats/settings and completed verified downloads are preserved. Setup diagnostics are retained in `setup-install.log` in the application folder.
 
+## Longer generation and tool reliability in 4.6.2
+
+A local response can be configured for 512 to 16,384 output tokens. The actual per-response limit reflects available space in the selected context. For a 16 GB RTX 4080 Super with the Qwen3.5 9B Q8_0 model, start with a 16,384-token context and try 8,192 response tokens for long work. Larger contexts consume more KV-cache memory. Compatible APIs use server defaults unless you select the output limit field that the endpoint supports.
+
+**Automatic text continuations** defaults to three additional generations and supports 0 through 8. After a token cutoff, eligible prose can continue in the same message. An interrupted prose answer is marked as partial. The chat retains the original messages and sends shorter excerpts of older exchanges when context is tight. The local log records estimated prompt size and actual token counts or generation speed when the server reports them.
+
+Tool replies have their own validation and recovery. Long file writes can use ordered parts and are published only after the final part succeeds.
+
 ## See Veynuq
 
 Three screenshots of Veynuq 4.5.5 running on Windows in English with an isolated demo profile, including the local dictation button and optional-tool cleanup controls. The illustrative conversation contains no personal chat or credentials and is not a benchmark. New profiles start in English.

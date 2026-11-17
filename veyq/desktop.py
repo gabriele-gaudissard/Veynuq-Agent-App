@@ -58,7 +58,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.6.1"
+        s["version"] = "4.6.2"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -233,7 +233,7 @@ class DesktopAPI:
             if not isinstance(values, dict):
                 raise ValueError("Impostazioni non valide.")
             s = self._store.snapshot()["settings"]
-            for key in ("lang", "provider", "url", "model", "permission", "network", "max_steps", "command_timeout", "github_repo", "auto_update", "vision", "execution_environment", "desktop_scope", "background_schedules", "image_provider", "image_url", "image_model", "context_tokens", "response_tokens", "tool_retries", "model_streaming"):
+            for key in ("lang", "provider", "url", "model", "permission", "network", "max_steps", "command_timeout", "github_repo", "auto_update", "vision", "execution_environment", "desktop_scope", "background_schedules", "image_provider", "image_url", "image_model", "context_tokens", "response_tokens", "tool_retries", "model_streaming", "text_continuations", "compatible_limit_field"):
                 if key in values:
                     s[key] = values[key]
             if s["provider"] not in {"local", "compatible"} or s["permission"] not in {"always", "auto", "full"}:
@@ -245,7 +245,13 @@ class DesktopAPI:
             if s['desktop_scope'] not in {'all','sandbox'}: raise ValueError('Unknown desktop scope.')
             if type(s['background_schedules']) is not bool: raise ValueError('Invalid background setting.')
             if type(s['context_tokens']) is not int or not 8192<=s['context_tokens']<=65536: raise ValueError('Context tokens must be between 8192 and 65536.')
-            if type(s['response_tokens']) is not int or not 512<=s['response_tokens']<=8192: raise ValueError('Response tokens must be between 512 and 8192.')
+            from .generation import COMPATIBLE_LIMIT_FIELDS, MAX_CONTINUATIONS, MAX_OUTPUT
+            if type(s['response_tokens']) is not int or not 512 <= s['response_tokens'] <= MAX_OUTPUT:
+                raise ValueError('Response tokens must be between 512 and 16384.')
+            if type(s['text_continuations']) is not int or not 0 <= s['text_continuations'] <= MAX_CONTINUATIONS:
+                raise ValueError('Text continuations must be between 0 and 8.')
+            if not isinstance(s['compatible_limit_field'], str) or s['compatible_limit_field'] not in COMPATIBLE_LIMIT_FIELDS:
+                raise ValueError('Unknown compatible API output limit.')
             if type(s['tool_retries']) is not int or not 0 <= s['tool_retries'] <= 3:
                 raise ValueError('Tool recovery attempts must be between 0 and 3.')
             if type(s['model_streaming']) is not bool:
@@ -1024,7 +1030,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.6.1", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.6.2", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates

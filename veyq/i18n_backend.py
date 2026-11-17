@@ -35,3 +35,62 @@ def model_response_message(lang, reason, tool=""):
     index = {"length": 1, "retry": 2, "draft_incomplete": 3, "draft_discarded": 4}.get(reason, 0)
     text = messages[index]
     return f"{tool} — {text}" if tool else text
+
+
+def generation_message(lang, reason, partial=False):
+    localized = {
+        "en": (
+            "The response reached the output limit.",
+            "There is too little room in the model context. Shorten the input or increase context if your hardware supports it.",
+            "The model server ran out of memory. Try a smaller context or free memory.",
+            "The model server timed out.",
+            "The model returned too much data in a single response.",
+            "Continuing the long response…",
+            "The continuation repeated earlier text.",
+            "The model did not return a safe text continuation.",
+            "The model server interrupted the response.",
+            "The partial text was saved. Send a follow-up to continue.",
+        ),
+        "it": (
+            "La risposta ha raggiunto il limite di output.",
+            "Lo spazio nel contesto del modello è insufficiente. Accorcia la richiesta o aumenta il contesto se l’hardware lo consente.",
+            "Il server del modello ha esaurito la memoria. Riduci il contesto o libera memoria.",
+            "Il server del modello non ha risposto entro il tempo previsto.",
+            "Il modello ha inviato troppi dati in una singola risposta.",
+            "Proseguo con la risposta lunga…",
+            "La continuazione ha ripetuto il testo precedente.",
+            "Il modello non ha restituito una continuazione testuale utilizzabile.",
+            "Il server del modello ha interrotto la risposta.",
+            "Il testo parziale è stato salvato. Invia un seguito per continuare.",
+        ),
+        "es": (
+            "La respuesta alcanzó el límite de salida.",
+            "Queda poco espacio en el contexto del modelo. Acorta la entrada o amplía el contexto si el equipo lo permite.",
+            "El servidor del modelo se quedó sin memoria. Reduce el contexto o libera memoria.",
+            "El servidor del modelo agotó el tiempo de espera.",
+            "El modelo envió demasiados datos en una sola respuesta.",
+            "Continuando la respuesta larga…",
+            "La continuación repitió texto anterior.",
+            "El modelo no devolvió una continuación de texto válida.",
+            "El servidor del modelo interrumpió la respuesta.",
+            "El texto parcial se guardó. Envía un mensaje para continuar.",
+        ),
+        "fr": (
+            "La réponse a atteint la limite de sortie.",
+            "Il reste trop peu de place dans le contexte du modèle. Raccourcissez la demande ou agrandissez le contexte si le matériel le permet.",
+            "Le serveur du modèle a manqué de mémoire. Réduisez le contexte ou libérez de la mémoire.",
+            "Le serveur du modèle a dépassé le délai d’attente.",
+            "Le modèle a envoyé trop de données dans une seule réponse.",
+            "Poursuite de la réponse longue…",
+            "La suite a répété du texte déjà généré.",
+            "Le modèle n’a pas fourni de suite textuelle exploitable.",
+            "Le serveur du modèle a interrompu la réponse.",
+            "Le texte partiel a été enregistré. Envoyez un nouveau message pour continuer.",
+        ),
+    }
+    messages = localized.get(lang, localized["en"])
+    index = {
+        "length": 0, "context": 1, "memory": 2, "timeout": 3, "response_size": 4,
+        "continuing": 5, "no_progress": 6, "structured": 7, "backend": 8,
+    }.get(reason, 8)
+    return messages[index] + (" " + messages[9] if partial else "")

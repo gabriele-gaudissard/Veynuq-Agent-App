@@ -4,13 +4,19 @@ import json
 import time
 
 
-def compact(session, limit):
+def compact(session, limit, *, measure=None):
     history = session['history']
     eligible = [i for i, m in enumerate(history) if m.get('role') == 'user']
+    def size(rows):
+        return len(json.dumps(rows)) if measure is None else sum(map(measure, rows))
+
     cut = 0
-    while len(json.dumps(history[cut:])) > limit and len(eligible) > 2:
-        eligible.pop(0)
-        cut = eligible[0]
+    remaining = size(history)
+    for next_cut in eligible[1:-1]:
+        if remaining <= limit:
+            break
+        remaining -= size(history[cut:next_cut])
+        cut = next_cut
     if cut:
         notes = [session.get('context_summary', '')]
         previous = min(session.get('context_offset', 0), cut)
@@ -46,14 +52,14 @@ def compact(session, limit):
             except (KeyError, TypeError, ValueError, RecursionError):
                 valid = False
         write = any(c.get('function', {}).get('name') == 'write_file' for c in calls)
-        if not valid or (write and len(json.dumps(result)) > limit):
+        if not valid or (write and size(result) > limit):
             result[index:end] = [tool_observation(result[index+1:end])]
             index += 1
         else:
             index = end
     # A long single task can contain many tool exchanges without a new user turn.
     # Replace whole completed exchanges; preserve requests and the recent tail.
-    while len(json.dumps(result)) > limit:
+    while size(result) > limit:
         index = next((i for i, m in enumerate(result[:-4]) if m.get('role') == 'assistant' and m.get('tool_calls')), None)
         if index is None:
             index = next((i for i, m in enumerate(result[:-4]) if m.get('role') == 'assistant' and not m.get('tool_calls')), None)
@@ -63,6 +69,17 @@ def compact(session, limit):
         ids, end = tool_exchange(result, index)
         if {m.get('tool_call_id') for m in result[index+1:end]} != ids: break
         result[index:end] = [tool_observation(result[index+1:end])]
+    # A single long explanation can dominate a short chat. Send a bounded
+    # excerpt for context; the complete text stays in the saved transcript.
+    if measure is not None and size(result) > limit:
+        for message in result:
+            if message.get('role') != 'assistant' or message.get('tool_calls'):
+                continue
+            text = message.get('content', '')
+            if len(text) > 2400:
+                message['content'] = text[:450] + '\n[Earlier response excerpt]\n' + text[-1500:]
+                if size(result) <= limit:
+                    break
     return result
 
 
