@@ -75,3 +75,8 @@ Zero now genuinely means unlimited turns and disables the derived total-call bud
 The no-progress guard fingerprints observations without logging their content. Four repeated unchanged observations trigger guidance; repetition continuing through another such group stops the activity with no_progress. Distinct inputs/ranges/results remain eligible. Rewriting a previously known file state is not treated as new progress merely because its backup ID changed.
 
 The selected model and quantization remain unchanged. Required tool choice cannot ensure correct reasoning or completion for every request. Future backend changes can make a private local worker unavailable; the native fallback retains its supported behavior and records the limitation. This release does not assert universal model correctness or identity with another agent.
+
+
+## Release-gate follow-up
+
+The initial fresh-install CI attempt timed out. The existing harness captured the complete installer output in pipes, hiding installation progress; child-process pipes also delayed timeout cleanup. The gate now streams the installer's existing output directly to CI while retaining its 1,200-second limit. This is a verification-harness correction, not a change to the application installer. The release remains gated by the real fresh-install result.

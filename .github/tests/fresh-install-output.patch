@@ -1,0 +1,12 @@
+--- a/tests/fresh_install_check.py
++++ b/tests/fresh_install_check.py
+@@ -18,8 +18,7 @@
+             target=app/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,target)
+         shutil.copytree(ROOT/'veyq',app/'veyq',ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+         env={**os.environ,'VEYNUQ_DATA_DIR':str(base/'profile')}
+-        run=subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(app/'install.ps1'),'-ShortcutDirectory',str(base/'shortcuts')],cwd=app,env=env,timeout=1200,capture_output=True,text=True,encoding='utf-8',errors='replace')
+-        print(run.stdout+run.stderr,flush=True)
++        run=subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(app/'install.ps1'),'-ShortcutDirectory',str(base/'shortcuts')],cwd=app,env=env,timeout=1200)
+         if run.returncode: raise RuntimeError('Fresh installation failed.')
+         runtime=json.loads((app/'runtime.json').read_text(encoding='utf-8'))['python']
+         assert Path(runtime).resolve().is_relative_to(app.resolve())
