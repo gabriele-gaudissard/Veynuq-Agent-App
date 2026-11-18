@@ -18,10 +18,13 @@ return (async () => {
     await w.showSettings();
     assert.equal(document.getElementById("minResponseTokens").value, "1024");
     assert.equal(document.getElementById("contextThreshold").value, "80");
+    assert.equal(document.getElementById("maxSteps").hasAttribute("max"), false);
+    document.getElementById("maxSteps").value = "0";
     document.getElementById("minResponseTokens").value = "1536";
     document.getElementById("contextThreshold").value = "75";
     await w.saveSettings();
     const saved = calls.find(row => row[0] === "saveSettings")[1];
+    assert.equal(saved.max_steps, 0);
     assert.equal(saved.min_response_tokens, 1536);
     assert.equal(saved.context_threshold, 75);
     await w.loadSession("demo");

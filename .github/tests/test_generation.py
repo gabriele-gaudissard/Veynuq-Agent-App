@@ -109,7 +109,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(message, {"role": "assistant", "content": start + " trade expanded."})
         request = post.call_args.kwargs["json"]
         self.assertNotIn("tools", request)
-        self.assertNotIn("tool_choice", request)
+        self.assertEqual(request["tool_choice"], "none")
         self.assertEqual(request["messages"][1]["content"], start)
         self.assertEqual("".join(data["text"] for kind, data in self.events if kind == "text"), message["content"])
         self.assertEqual(new_text(start, start), "")

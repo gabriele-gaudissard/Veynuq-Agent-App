@@ -25,13 +25,25 @@ HTTPS downloads use the Windows certificate trust store through truststore, incl
 
 Python installation now displays the official installer's real progress bar in unattended `/passive` mode. The Python download also keeps progress visible. An existing up-to-date installation is still skipped. To retry an interrupted 4.6.0 setup, download the current `Veynuq-Setup.exe` and run it again: existing chats/settings and completed verified downloads are preserved. Setup diagnostics are retained in `setup-install.log` in the application folder.
 
+## Tool selection and progress in 4.6.5
+
+Requests for explanations or code displayed in chat use no tools. Resource-based analysis can select tools automatically. Authorized actions that still need execution request a required tool call when the server supports it. Each turn receives relevant definitions from the existing enabled pool; tools needed for later steps remain available after the first successful action. Disabled tools and approval gates are preserved. No model is replaced.
+
+On supported Windows local installations, Veynuq associates the configured native API with its own llama.cpp worker using the API listener, parent process, executable path and exact model path, then verifies the worker's properties. This allows the worker's supported Chat Completions tool-choice modes to be used with the existing GGUF template. Native model loading still controls the selected model and context. A bounded local lease keeps the native scheduler aware of long activities. Other installations retain their native adapter; unsupported required selection is not reported as enforced. A missing action gets at most one controlled recovery, separate from malformed-response recovery.
+
+The model-facing copy of a text-read result separates reference line labels from literal content. Saved and displayed tool results remain original; copying a displayed line label into an edit is avoided without changing the file tools.
+
+Repeated successful reads of unchanged content no longer count as unlimited progress. Veynuq detects repeated observations, asks the model to use the existing results for its next step, and stops with a specific no-progress outcome if repetition continues. Distinct files, ranges, changed content and actual actions can continue. The conversation and completed work remain saved.
+
+**Maximum steps: 0 = unlimited.** Positive whole numbers set a finite limit, including values above 1,000. Unlimited steps do not disable Stop, approvals, argument validation, bounded error recovery or detection of repeated unchanged observations.
+
 ## Operation completion and verification in 4.6.4
 
 The local adapter supplies the native tool name alongside each result and retains its call ID. If a model returns prose while an action is still required, recovery uses the original request and recorded evidence. Empty replies, missing action calls, generation errors, execution failures, partial completion and pending verification have distinct recorded outcomes.
 
 Published text writes are read back and checked against the backend's expected byte count and SHA-256. The task center lists individual operation states. Identical writes can reuse a still-valid verified result, while uncertain executions are held for inspection. Outstanding plan steps prevent an activity from being marked complete.
 
-The iteration setting supports 1–1,000 turns. Zero uses the 1,000-turn ceiling. Recovery attempts remain bounded, and Stop is available during generation and execution.
+The iteration setting now supports unlimited turns at zero or a positive finite limit. Recovery attempts remain bounded, and Stop is available during generation and execution.
 
 ## Conversation context management in 4.6.3
 
@@ -120,7 +132,7 @@ English, Italian, Spanish and French apply immediately and persist across restar
 
 Type while the agent works to send a **follow-up**. During a model response it interrupts the stream and replans within the same activity. An already executing command reaches its completion; remaining calls from the old batch are marked as skipped before the new instruction is processed, keeping tool/result pairing valid. Leave the composer empty to **Stop**. Regeneration removes later chat messages but does not undo previously executed actions; inspect the result before repeating work.
 
-**Maximum steps. Zero uses the 1,000-turn safety limit. Command timeout. Zero disables the command timeout.** New profiles start with both values at zero. You can select 1–1,000 turns in Settings. Stop, window-close cleanup, output-size validation and repeated-identical-action protection remain active. Network transports retain connection/read timeouts so unavailable services do not hang forever.
+**Maximum steps. Zero means unlimited steps. Command timeout. Zero disables the command timeout.** New profiles start with both values at zero. Positive whole numbers set a finite step limit in Settings. Stop, window-close cleanup, output-size validation and repeated-identical-action protection remain active. Network transports retain connection/read timeouts so unavailable services do not hang forever.
 
 ## Approval modes
 

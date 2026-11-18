@@ -153,8 +153,8 @@ class ToolCallingTests(unittest.TestCase):
                 with patch.object(client.session, "post", return_value=result) as post, self.assertLogs("veyq.engine") as logs:
                     with self.assertRaisesRegex(RuntimeError, "No action"):
                         client.chat([{"role":"user","content":"Create proof.py."}])
-                self.assertIn(reason, logs.output[0])
-                self.assertNotIn("proof.py", logs.output[0])
+                self.assertIn(reason, "\n".join(logs.output))
+                self.assertNotIn("proof.py", "\n".join(logs.output))
                 post.assert_called_once()
                 result.close.assert_called_once()
         self.assertFalse((self.project / "proof.py").exists())
@@ -172,7 +172,7 @@ class ToolCallingTests(unittest.TestCase):
         self.assertEqual(payloads[1]["messages"][1:-1], history)
         self.assertIn("substantially shorter", payloads[1]["messages"][0]["content"])
         self.assertIn("Call write_file once", payloads[1]["messages"][-1]["content"])
-        self.assertIn("source=llama-server reason=backend_tool_eof tool=write_file http=500 retry=True", logs.output[0])
+        self.assertIn("source=llama-server reason=backend_tool_eof tool=write_file http=500 retry=True", "\n".join(logs.output))
         initial.close.assert_called_once()
 
     def test_compatible_batch_assembled_by_index_and_finish_reason(self):
@@ -200,7 +200,7 @@ class ToolCallingTests(unittest.TestCase):
                 with patch.object(client.session, "post", return_value=response([fragment,last], sse=True)), self.assertLogs("veyq.engine") as logs:
                     with self.assertRaisesRegex(RuntimeError, "No action"):
                         client.chat([])
-                self.assertIn(category, logs.output[0])
+                self.assertIn(category, "\n".join(logs.output))
 
     def test_ndjson_error_then_valid_response_and_bounded_persistent_error(self):
         detail = 'llama-server returned invalid tool call arguments for "write_file": unexpected end of JSON input'

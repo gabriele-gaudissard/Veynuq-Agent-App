@@ -114,5 +114,5 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --clobber
           else
-            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.4 · ${BUILD_SHA:0:7}" --notes "This release improves agent completion, native tool result correlation and verified operation outcomes. Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
+            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.5 · ${BUILD_SHA:0:7}" --notes "This release adds relevant tool selection, supported required tool calls, truly unlimited steps and recovery from repeated unchanged reads. Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
           fi

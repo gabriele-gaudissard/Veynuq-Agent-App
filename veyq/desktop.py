@@ -58,7 +58,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.6.4"
+        s["version"] = "4.6.5"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -274,8 +274,8 @@ class DesktopAPI:
                 raise ValueError("Valore rete/aggiornamenti non valido.")
             if not isinstance(s["vision"], bool):
                 raise ValueError("Vision must be enabled explicitly for remote vision models.")
-            if type(s["max_steps"]) is not int or not 0 <= s["max_steps"] <= 1000:
-                raise ValueError("Step limit: 0 uses the 1000-step safety limit; otherwise choose 1–1000.")
+            if type(s["max_steps"]) is not int or s["max_steps"] < 0:
+                raise ValueError("Step limit: use 0 for unlimited steps, or a positive whole number.")
             if type(s["command_timeout"]) is not int or not 0 <= s["command_timeout"] <= 600:
                 raise ValueError("Command timeout: 0 to disable, or 1–600 seconds.")
             if not isinstance(s["model"], str) or not s["model"].strip() or len(s["model"]) > 200:
@@ -1034,7 +1034,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.6.4", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.6.5", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates

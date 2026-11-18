@@ -21,6 +21,9 @@
 +        self.assertIn('"verification": []',statuses[1])
 --- a/tests/test_regressions.py
 +++ b/tests/test_regressions.py
+@@ -73 +73 @@
+-        self.assertEqual(chat.call_count,3)
++        self.assertEqual(chat.call_count,2)
 @@ -75 +75 @@
 -        self.assertIn('could not complete and verify',self.api.get_session(self.sid)['history'][-1]['content'])
 +        self.assertIn('did not produce an action call',self.api.get_session(self.sid)['history'][-1]['content']);self.assertEqual(self.agent.state,'failed')
