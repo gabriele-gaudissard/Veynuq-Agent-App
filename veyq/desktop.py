@@ -19,6 +19,8 @@ class DesktopAPI:
     def __init__(self, store=None):
         self._store = store or Store(legacy=ROOT / "codex_data.json")
         self._agent = Agent(self._store, ROOT)
+        from .parallel import Activities
+        self._runs = Activities(self._store, ROOT, self._agent)
         self._window = None
         self._maintenance = threading.Lock()
         self._model_cancel = threading.Event()
@@ -43,9 +45,9 @@ class DesktopAPI:
                 self._store.data["settings"]["workspace"] = str(workspace)
                 self._store.save()
 
-    def _idle(self):
+    def _idle(self, session_id=None):
         if self._voice.busy(): raise RuntimeError('Stop dictation before changing configuration.')
-        if self._agent.busy or self._maintenance.locked():
+        if self._runs.busy(session_id) or self._maintenance.locked():
             raise RuntimeError("Attendi la fine dell'attivita' prima di cambiare configurazione.")
 
     def _begin_setup(self):
@@ -58,7 +60,7 @@ class DesktopAPI:
         s["has_provider_token"] = bool(self._store.vault.get("provider"))
         s["has_github_token"] = bool(self._store.vault.get("github"))
         s["data_dir"] = str(self._store.root)
-        s["version"] = "4.6.5"
+        s["version"] = "4.6.6"
         s['has_image_token'] = bool(self._store.vault.get('image'))
         s["recovery_notice"] = self._store.recovery_notice
         return s
@@ -233,7 +235,7 @@ class DesktopAPI:
             if not isinstance(values, dict):
                 raise ValueError("Impostazioni non valide.")
             s = self._store.snapshot()["settings"]
-            for key in ("lang", "provider", "url", "model", "permission", "network", "max_steps", "command_timeout", "github_repo", "auto_update", "vision", "execution_environment", "desktop_scope", "background_schedules", "image_provider", "image_url", "image_model", "context_tokens", "response_tokens", "tool_retries", "model_streaming", "text_continuations", "compatible_limit_field", "min_response_tokens", "context_threshold"):
+            for key in ("lang", "provider", "url", "model", "permission", "network", "max_steps", "max_subagents", "max_parallel_runs", "command_timeout", "github_repo", "auto_update", "vision", "execution_environment", "desktop_scope", "background_schedules", "image_provider", "image_url", "image_model", "context_tokens", "response_tokens", "tool_retries", "model_streaming", "text_continuations", "compatible_limit_field", "min_response_tokens", "context_threshold"):
                 if key in values:
                     s[key] = values[key]
             if s["provider"] not in {"local", "compatible"} or s["permission"] not in {"always", "auto", "full"}:
@@ -274,6 +276,9 @@ class DesktopAPI:
                 raise ValueError("Valore rete/aggiornamenti non valido.")
             if not isinstance(s["vision"], bool):
                 raise ValueError("Vision must be enabled explicitly for remote vision models.")
+            for field, minimum in (("max_subagents", 0), ("max_parallel_runs", 1)):
+                if type(s[field]) is not int or not minimum <= s[field] <= 8:
+                    raise ValueError("Choose 0–8 subagents and 1–8 parallel requests.")
             if type(s["max_steps"]) is not int or s["max_steps"] < 0:
                 raise ValueError("Step limit: use 0 for unlimited steps, or a positive whole number.")
             if type(s["command_timeout"]) is not int or not 0 <= s["command_timeout"] <= 600:
@@ -281,6 +286,7 @@ class DesktopAPI:
             if not isinstance(s["model"], str) or not s["model"].strip() or len(s["model"]) > 200:
                 raise ValueError("Nome modello non valido.")
             validate_endpoint(s["url"], s["network"])
+            self._store.__dict__.pop("_subagent_pool", None)
             for field in ('provider_token','github_token','image_token'):
                 if field in values and (not isinstance(values[field],str) or len(values[field])>8000): raise ValueError('Invalid credential value.')
                 if 'clear_'+field in values and type(values['clear_'+field]) is not bool: raise ValueError('Invalid credential removal setting.')
@@ -358,7 +364,7 @@ class DesktopAPI:
 
     def assign_project(self, session_id, project_id):
         with self._agent.lock:
-            self._idle()
+            self._idle(session_id)
             project = next((p for p in self._store.data["projects"] if p["id"] == project_id), None)
             if project_id and not project:
                 raise ValueError("Project not found.")
@@ -378,7 +384,7 @@ class DesktopAPI:
         session = self.get_session(session_id)
         if not session or session.get('task', {}).get('state') not in {'interrupted','failed','cancelled','limit','unverified','blocked','partial','incomplete'}:
             raise ValueError('No interrupted task to resume.')
-        return self._agent.start(session_id, 'Resume the previous task: ' + session['task'].get('goal', '')[:15000] + '\nInspect the actual state and uncertain tool outcomes before retrying. Preserve completed work. Use the saved progress and next steps.', policy=session['task'].get('policy'))
+        return self._start_activity(session_id, 'Resume the previous task: ' + session['task'].get('goal', '')[:15000] + '\nInspect the actual state and uncertain tool outcomes before retrying. Preserve completed work. Use the saved progress and next steps.', policy=session['task'].get('policy'))
 
     def get_task_overview(self, session_id):
         from .workflows import PROCEDURES
@@ -504,19 +510,24 @@ class DesktopAPI:
             self._store.save()
         return {'ok':True}
 
-    def create_session(self):
+    def create_session(self, source_session_id=None):
         with self._agent.lock:
-            self._idle()
+            self._idle("")
             with self._store.lock:
                 session = {"id": uuid.uuid4().hex, "title": "New activity", "history": [], "plan": [],
                            "workspace": self._store.data["settings"]["workspace"], "project_id": "", "auto_title": True}
+                if source_session_id:
+                    source = next((row for row in self._store.data["sessions"] if row["id"] == source_session_id), None)
+                    if not source:
+                        raise ValueError("Source chat not found.")
+                    session.update(workspace=source["workspace"], project_id=source.get("project_id", ""))
                 self._store.data["sessions"].insert(0, session)
                 self._store.save()
             return session["id"]
 
     def rename_session(self, session_id, title):
         with self._agent.lock:
-            self._idle()
+            self._idle(session_id)
             with self._store.lock:
                 s = next(s for s in self._store.data["sessions"] if s["id"] == session_id)
                 s["title"] = str(title).strip()[:100] or "Attivita'"
@@ -526,18 +537,16 @@ class DesktopAPI:
 
     def delete_session(self, session_id):
         with self._agent.lock:
-            self._idle()
+            self._idle(session_id)
             with self._store.lock:
                 self._store.data["sessions"] = [s for s in self._store.data["sessions"] if s["id"] != session_id]
                 self._store.data['automations'] = [j for j in self._store.data['automations'] if j['session_id'] != session_id]
                 self._store.save()
-            if self._agent.current_session == session_id:
-                self._agent.current_session = ""
-                self._agent.events = type(self._agent.events)((e for e in self._agent.events if e.get("session_id") != session_id), maxlen=2000)
-            return {"ok": True}
+        self._runs.forget(session_id)
+        return {"ok": True}
 
     def choose_workspace(self, session_id):
-        self._idle()
+        self._idle(session_id)
         if not self._window:
             return None
         import webview
@@ -546,7 +555,7 @@ class DesktopAPI:
 
     def set_workspace(self, session_id, path):
         with self._agent.lock:
-            self._idle()
+            self._idle(session_id)
             workspace = Path(path).resolve()
             if not workspace.is_dir() or workspace == Path(workspace.anchor):
                 raise ValueError("Scegli una cartella di progetto, non la radice del disco.")
@@ -610,20 +619,26 @@ class DesktopAPI:
             raise ValueError("Choose a folder outside protected data.")
         return str(target)
 
+    def _start_activity(self, session_id, text, policy=None):
+        with self._agent.lock:
+            self._idle(session_id)
+            self._scheduler.tick(finish_only=True)
+            return self._runs.start(session_id, text, policy=policy)
+
     def start_run(self, session_id, text):
         with self._agent.lock:
-            self._idle()
-            return self._agent.start(session_id, text)
+            self._idle(session_id)
+            return self._start_activity(session_id, text)
 
     def follow_up(self, session_id, text):
-        return self._agent.follow_up(session_id, text)
+        return self._runs.follow_up(session_id, text)
 
     def answer_question(self, question_id, answer):
-        return self._agent.resolve_question(question_id, answer)
+        return self._runs.resolve(question_id, answer, question=True)
 
     def regenerate(self, session_id, history_index, confirmed=False):
         with self._agent.lock:
-            self._idle()
+            self._idle(session_id)
             if not confirmed or type(history_index) is not int:
                 raise ValueError("Confirm regeneration; later chat messages will be removed, executed actions stay applied.")
             session = next(s for s in self._store.data["sessions"] if s["id"] == session_id)
@@ -632,7 +647,7 @@ class DesktopAPI:
             with self._store.lock:
                 session["history"] = session["history"][:history_index]
                 self._store.save()
-            return self._agent.start(session_id, "Regenerate the response using existing tool evidence. Completed side effects remain applied; inspect before repeating any action.")
+            return self._start_activity(session_id, "Regenerate the response using existing tool evidence. Completed side effects remain applied; inspect before repeating any action.")
 
     def browse_project(self, session_id, path="."):
         self._idle()
@@ -642,8 +657,8 @@ class DesktopAPI:
         self._idle()
         return self._agent.manual(session_id, "read_file", {"path": path, "start_line": start_line, "end_line": start_line + 299})
 
-    def get_events(self, after=0):
-        return {**self._agent.poll(after), "model_busy": self._maintenance.locked()}
+    def get_events(self, after=0, session_id=None):
+        return {**self._runs.poll(after, session_id), "model_busy": self._maintenance.locked()}
 
     def voice_status(self):
         result=self._voice.snapshot()
@@ -666,11 +681,11 @@ class DesktopAPI:
     def cancel_voice(self):
         return self._voice.cancel()
 
-    def stop_run(self):
-        return self._agent.stop()
+    def stop_run(self, session_id=None):
+        return self._runs.stop(session_id)
 
     def resolve_approval(self, approval_id, allow):
-        return self._agent.resolve(approval_id, allow)
+        return self._runs.resolve(approval_id, allow)
 
     def get_memory(self):
         return self._store.snapshot().get("memory", "")
@@ -1034,7 +1049,7 @@ def foreground_main(data_dir):
             atomic_json(store.root/'background-status.json',{'state':'setup_failed'})
     if "--self-check" in sys.argv:
         api = DesktopAPI(store)
-        print(json.dumps({"version": "4.6.5", "models": api.get_models(), "data_dir": str(store.root)}))
+        print(json.dumps({"version": "4.6.6", "models": api.get_models(), "data_dir": str(store.root)}))
         return
     if "--install" in sys.argv:
         from .updater import enable_updates
@@ -1054,7 +1069,7 @@ def foreground_main(data_dir):
     def shutdown():
         # pywebview puts callback returns in a set: API dictionaries cannot
         # be returned from an event handler. Closing must also stop downloads.
-        api._agent.stop()
+        api._runs.stop()
         api.cancel_model_action()
         api._scheduler.stop_event.set()
         api._voice.close()

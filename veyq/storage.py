@@ -16,6 +16,7 @@ DEFAULTS = {
     "lang": "en", "provider": "local", "url": "http://localhost:11434",
     "model": "qwen3:14b", "permission": "auto", "network": False,
     "workspace": "", "max_steps": 0, "command_timeout": 0,
+    "max_subagents": 3, "max_parallel_runs": 2,
     "github_repo": "", "context_chars": 60000, "auto_update": True, "vision": False,
     "execution_environment": "host",
     "desktop_scope": "all", "background_schedules": False,

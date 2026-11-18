@@ -31,6 +31,7 @@ jobs:
           git restore --source=60d9d32826485c14d21f3ce53196591938372364 --worktree -- tests package.json package-lock.json ui-translations.json
           git apply .github/tests/windows-control-timeout.patch
           git apply --unidiff-zero .github/tests/agent-completion.patch
+          git apply --ignore-space-change --unidiff-zero .github/tests/parallel-ui.patch
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: python -m unittest discover -s .github/tests -v
@@ -39,6 +40,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm test
       - run: node .github/test_context_ui.cjs
+      - run: node .github/test_parallel_ui.cjs
 
   sandbox-test:
     runs-on: ubuntu-latest
@@ -115,5 +117,5 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --clobber
           else
-            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.5 · ${BUILD_SHA:0:7}" --notes "This release adds relevant tool selection, supported required tool calls, truly unlimited steps and recovery from repeated unchanged reads. Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
+            gh release create "$tag" release/veyq-update.zip release/veyq-update.json release/Veynuq-Setup.exe release/Veynuq-Setup.exe.sha256 --target "$BUILD_SHA" --title "Veynuq 4.6.6 · ${BUILD_SHA:0:7}" --notes "This release adds model-directed subagents with a shared configurable limit, parallel independent chats, and evidence-based execution states with bounded recovery from repeated analysis. Download Veynuq-Setup.exe for automatic installation and complete configuration. The ZIP remains available for manual installation. Existing managed installations update automatically." --latest
           fi

@@ -34,7 +34,7 @@ class Scheduler:
                         if agent.state != 'completed': job['enabled'] = False
                         store.save()
                     self.active = None
-                if finish_only: return
+                if finish_only or self.api._runs.busy(): return
                 for job in store.data['automations']:
                     if not job['enabled'] or job['next_run'] > now: continue
                     session = next((s for s in store.data['sessions'] if s['id'] == job['session_id']), None)

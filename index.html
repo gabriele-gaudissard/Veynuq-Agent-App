@@ -48,7 +48,7 @@
           ><button id="memory">◇ Local memory</button
           ><button id="toolsButton">⌘ Tools</button
           ><button id="settingsButton">⚙ Settings</button>
-          <div class="sub">Desktop agent · v4.6.5<br />No telemetry</div>
+          <div class="sub">Desktop agent · v4.6.6<br />No telemetry</div>
         </div>
       </aside>
       <main>
@@ -130,7 +130,8 @@
                 <button id="voiceButton" title="Local voice input">🎙 Speak</button>
                 <button id="cancelVoice" hidden>Cancel dictation</button>
               </div>
-              <button class="primary" id="send">Send ↑</button>
+              <div class="composer-send"><button id="parallelSend" hidden title="Send as a new independent chat">Run in parallel</button>
+              <button class="primary" id="send">Send ↑</button></div>
             </div>
           </div>
           <div id="voiceStatus" class="voice-status" role="status" aria-live="polite" hidden></div>
@@ -399,7 +400,13 @@
               id="maxSteps"
               min="0"
               type="number" /></label
-          ><label class="field"
+          ><label class="field">Maximum concurrent subagents (0 = disabled)
+            <input id="maxSubagents" type="number" min="0" max="8" />
+            <small>The model decides when independent work benefits from delegation. Coding workers use separate project copies.</small>
+          </label><label class="field">Maximum parallel requests
+            <input id="maxParallelRuns" type="number" min="1" max="8" />
+            <small>Run independent chats together. Follow-ups keep updating the current activity.</small>
+          </label><label class="field"
             >Command timeout (0 = disabled)<input
               id="timeout"
               max="600"

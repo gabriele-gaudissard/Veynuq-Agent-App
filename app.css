@@ -941,3 +941,5 @@ summary:focus-visible {
 .model-select-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .model-select-row button { padding: 4px 11px; }
 #imageHelpContent p { line-height: 1.6; font-size: .92rem; margin-bottom: 16px; }
+
+.composer-send { display:flex; gap:8px; align-items:center; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }

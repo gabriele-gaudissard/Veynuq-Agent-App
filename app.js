@@ -20,6 +20,9 @@ let projects = [],
   sessionLoad = 0,
   sessionsRefresh = 0,
   liveDrafts = new Map(),
+  runningSessions = new Map(),
+  composerDrafts = new Map(),
+  anyBusy = false,
   questionId = "",
   infoModel = "",
   modelBusy = false;
@@ -84,32 +87,24 @@ function setBusy(value, state) {
 
   $("state").textContent = state || (value ? "In esecuzione" : "Pronto");
   $("status").classList.toggle("busy", value);
-  for (const id of [
-    "newChat",
-    "chooseFolder",
-    "exploreFiles",
-    "settingsButton",
-    "newProject",
-    "projectAssignment",
-  ])
+  if (value) anyBusy = true;
+  for (const id of ["settingsButton", "newProject", "exploreFiles"])
+    $(id).disabled = anyBusy;
+  $("newChat").disabled = false;
+  for (const id of ["chooseFolder", "projectAssignment"])
     $(id).disabled = value;
-  $("prompt").disabled =
-    value && !!activeSession && activeSession !== sessionId;
+  $("prompt").disabled = false;
   if (changed) renderSessions();
   updateChatActions();
 }
 function updateSendButton() {
-  if (busy && activeSession && activeSession !== sessionId) {
-    $("send").textContent = ui("Return to active chat");
-    $("send").classList.remove("danger", "follow-up");
-    return;
-  }
   const follow = busy && $("prompt").value.trim();
   $("send").textContent = ui(
     busy ? (follow ? "Send follow-up ↑" : "Ferma") : "Invia ↑",
   );
   $("send").classList.toggle("danger", busy && !follow);
   $("send").classList.toggle("follow-up", !!follow);
+  $("parallelSend").hidden = !follow;
 }
 function codeBlock(parent, text, language) {
   const wrap = document.createElement("div");
@@ -335,7 +330,7 @@ function renderSessions() {
       const btn = document.createElement("button");
       btn.className = "session" + (s.id === sessionId ? " active" : "");
       const title = document.createElement("span");
-      title.textContent = s.untitled ? ui("New activity") : s.title;
+      title.textContent = (runningSessions.has(s.id) ? "● " : "") + (s.untitled ? ui("New activity") : s.title);
       btn.append(title);
       btn.title = title.textContent;
       btn.addEventListener("click", () =>
@@ -345,7 +340,7 @@ function renderSessions() {
       more.className = "session-more";
       more.textContent = "⋯";
       more.title = ui("More chat actions");
-      more.disabled = busy;
+      more.disabled = runningSessions.has(s.id);
       const menu = document.createElement("div");
       menu.className = "session-menu";
       menu.hidden = true;
@@ -433,10 +428,14 @@ function showContextUsage(stats) {
 
 async function loadSession(id) {
   if (voiceActive && id !== voiceSession) await cancelDictation();
+  if (sessionId) composerDrafts.set(sessionId, $("prompt").value);
   const request = ++sessionLoad;
   const s = await call("get_session", id);
   if (!s || request !== sessionLoad) return;
   sessionId = id;
+  $("prompt").value = composerDrafts.get(id) || "";
+  close("approvalModal"); approvalId = "";
+  close("questionModal"); questionId = "";
   $("messages")
     .querySelectorAll(".message")
     .forEach((n) => n.remove());
@@ -455,6 +454,13 @@ async function loadSession(id) {
     $("projectAssignment").append(option);
   }
   $("projectAssignment").value = s.project_id || "";
+  document.getElementById("activity").replaceChildren();
+  for (const row of s.history.filter(item => item.role === "tool").slice(-20)) {
+    try {
+      const result = JSON.parse(row.content);
+      activity((result.ok === false ? "⚠ " : "✓ ") + row.name, result, result.ok === false ? "error" : "success");
+    } catch {}
+  }
   renderPlan(s.plan);
   streamNode = null;
   streamText = "";
@@ -462,7 +468,7 @@ async function loadSession(id) {
     streamText = liveDrafts.get(id);
     streamNode = message("assistant", streamText);
   }
-  $("prompt").disabled = busy && !!activeSession && activeSession !== id;
+  setBusy(runningSessions.has(id), runningSessions.has(id) ? ui("In progress") : ui("Ready"));
   updateSendButton();
   updateChatActions();
   renderSessions();
@@ -492,6 +498,7 @@ function emptyChat() {
   }
   showWorkspace(settings.workspace);
   renderPlan([]);
+  setBusy(false);
   updateChatActions();
   updateSendButton();
   renderSessions();
@@ -501,6 +508,8 @@ async function deleteChatById(id) {
   ++sessionsRefresh;
   await call("delete_session", id);
   liveDrafts.delete(id);
+  composerDrafts.delete(id);
+  runningSessions.delete(id);
   if (activeSession === id) activeSession = "";
   if (selected) emptyChat();
   await refreshSessions();
@@ -523,13 +532,9 @@ function showWorkspace(path) {
 }
 async function send() {
   if (voiceActive) { toast('Finish or cancel dictation before sending.'); return; }
-  if (busy && activeSession && activeSession !== sessionId) {
-    await loadSession(activeSession);
-    return;
-  }
   const text = $("prompt").value.trim();
   if (busy && !text) {
-    await call("stop_run");
+    await call("stop_run", sessionId);
     setBusy(true, "Interruzione…");
     return;
   }
@@ -538,6 +543,7 @@ async function send() {
     await call("follow_up", sessionId, text);
     message("user", text);
     $("prompt").value = "";
+    composerDrafts.delete(sessionId);
     updateSendButton();
     toast("Follow-up received. Updating the current activity.");
     return;
@@ -545,6 +551,8 @@ async function send() {
   if (!sessionId) await newChat();
   await call("start_run", sessionId, text);
   activeSession = sessionId;
+  runningSessions.set(sessionId, {busy:true,state:"running"});
+  composerDrafts.delete(sessionId);
   $("prompt").value = "";
   message("user", text);
   streamText = "";
@@ -574,8 +582,14 @@ async function poll() {
   if (polling || !api) return;
   polling = true;
   try {
-    const result = await call("get_events", lastSeq);
-    activeSession = result.session_id || activeSession;
+    const result = await call("get_events", lastSeq, sessionId);
+    const runs = result.runs || [{session_id:result.session_id || sessionId, busy:result.busy, state:result.state}];
+    const oldRunning = [...runningSessions.keys()].sort().join(",");
+    runningSessions = new Map(runs.filter(row => row.busy).map(row => [row.session_id, row]));
+    anyBusy = result.any_busy ?? result.busy;
+    const selected = runs.find(row => row.session_id === sessionId) ||
+      {busy:false, state:result.session_id === sessionId ? result.state : "idle"};
+    if (oldRunning !== [...runningSessions.keys()].sort().join(",")) renderSessions();
     let draftChanged = false;
     for (const e of result.events) {
       lastSeq = e.seq;
@@ -648,6 +662,12 @@ async function poll() {
           );
           break;
         }
+        case "subagent":
+          activity(ui("Subagent") + " · " + ui(
+            d.state === "running" ? "In progress" : d.state === "queued" ? "Queued" :
+            d.state === "completed" ? "Completed" : d.state === "cancelled" ? "Stopped" : "Unverified"),
+            d, d.state === "completed" ? "success" : "info");
+          break;
         case "operation":
           activity(d.operation.tool + " · " + ui(d.operation.state === "completed" ? "Verified" :
             d.operation.state === "failed" ? "Failed" : d.operation.state === "staged" ? "Draft part saved" : "Unverified"),
@@ -696,15 +716,15 @@ async function poll() {
       scrollBottom();
     }
     setBusy(
-      result.busy,
-      result.busy
-        ? result.state === "question"
+      selected.busy,
+      selected.busy
+        ? selected.state === "question"
           ? ui("Waiting for your answer")
-          : result.state === "approval"
+          : selected.state === "approval"
             ? "Autorizzazione richiesta"
-            : result.state === "stopping"
+            : selected.state === "stopping"
               ? "Interruzione…"
-              : $("state").textContent
+              : busy ? $("state").textContent : ui("In progress")
         : {
             completed: "Completato",
             failed: "Errore",
@@ -714,12 +734,12 @@ async function poll() {
             unverified: ui("Unverified"),
             partial: ui("Partially completed"),
             blocked: ui("Blocked"),
-          }[result.state] || "Pronto",
+          }[selected.state] || "Pronto",
     );
-    if (result.approval) showApproval(result.approval);
-    if (result.question) showQuestion(result.question);
+    if (result.approval && (!result.session_id || result.session_id === sessionId)) showApproval(result.approval);
+    if (result.question && (!result.session_id || result.session_id === sessionId)) showQuestion(result.question);
     modelBusy = !!result.model_busy;
-    if (!result.busy && !voiceActive && updateReady) {
+    if (!anyBusy && !voiceActive && updateReady) {
       updateReady = false;
       await call("apply_update");
     }
@@ -849,7 +869,6 @@ function watchVoice(state) {
 }
 action('voiceButton', async () => {
   if (voicePhase === 'recording') { await call('stop_voice'); voiceControls('transcribing'); return; }
-  if (busy && activeSession && activeSession !== sessionId) { toast('Return to the active chat before dictating a follow-up.'); return; }
   const status = await call('voice_status');
   if (!status.ready) { open('voiceModal'); return; }
   voiceSession = sessionId;
@@ -953,13 +972,15 @@ async function showSettings() {
     ["model", "model"],
     ["permission", "permission"],
     ["maxSteps", "max_steps"],
+    ["maxSubagents", "max_subagents"],
+    ["maxParallelRuns", "max_parallel_runs"],
     ["timeout", "command_timeout"],
     ["githubRepo", "github_repo"],
     ["executionEnvironment", "execution_environment"],
     ['desktopScope','desktop_scope'],['contextTokens','context_tokens'],['responseTokens','response_tokens'],
     ['imageProvider','image_provider'],['imageEndpoint','image_url'],['imageModel','image_model'],
   ])
-    $(id).value = settings[key];
+    $(id).value = settings[key] ?? ({max_subagents:3,max_parallel_runs:2}[key] ?? "");
   $("minResponseTokens").value = settings.min_response_tokens ?? 1024;
   $("contextThreshold").value = settings.context_threshold ?? 80;
   $("textContinuations").value = settings.text_continuations ?? 3;
@@ -1153,6 +1174,8 @@ async function saveSettings() {
     vision: $("vision").checked,
     auto_update: $("autoUpdate").checked,
     max_steps: Number($("maxSteps").value),
+    max_subagents: Number($("maxSubagents").value),
+    max_parallel_runs: Number($("maxParallelRuns").value),
     command_timeout: Number($("timeout").value),
     github_repo: $("githubRepo").value.trim(),
     execution_environment: $("executionEnvironment").value || 'host',
@@ -1185,6 +1208,17 @@ async function checkUpdates(automatic = false) {
 }
 action("newChat", newChat);
 action("send", send);
+action("parallelSend", async () => {
+  const text = $("prompt").value.trim(), source = sessionId;
+  if (!text) return;
+  const id = await call("create_session", source);
+  $("prompt").value = "";
+  composerDrafts.delete(source);
+  await refreshSessions();
+  await loadSession(id);
+  $("prompt").value = text;
+  await send();
+});
 action("settingsButton", showSettings);
 action("mode", showSettings);
 action("online", showSettings);
@@ -1429,7 +1463,7 @@ document.addEventListener("keydown", (e) => {
       first.focus();
     }
   }
-  if (e.ctrlKey && e.key.toLowerCase() === "n" && !busy && !current) {
+  if (e.ctrlKey && e.key.toLowerCase() === "n" && !current) {
     e.preventDefault();
     newChat().catch((error) => toast(error.message));
   }
@@ -1499,7 +1533,7 @@ window.addEventListener("pywebviewready", async () => {
         2500,
       );
     setInterval(() => {
-      if (settings.auto_update && !busy)
+      if (settings.auto_update && !anyBusy)
         checkUpdates(true).catch((e) => activity("Aggiornamenti", e.message));
     }, 3600000);
   } catch (e) {

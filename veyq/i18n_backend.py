@@ -113,6 +113,7 @@ def generation_message(lang, reason, partial=False):
 def completion_message(lang, category):
     messages = {
         "en": {
+            "repeated_analysis": 'The model repeated analysis or promises without producing the required action call. Recovery did not resolve it. Verified work and the original conversation were preserved.',
             "no_progress": 'The model kept repeating unchanged observations without making progress. Recovery was attempted once. Completed work and the original conversation were preserved; resume with a more specific next step.',
             "no_tool_call": "The model did not produce an action call needed to finish this request after the recovery attempts. The tool results show what was actually performed.",
             "empty_response": "The model returned an empty response after the recovery attempts. Review the saved operation results before continuing.",
@@ -122,6 +123,7 @@ def completion_message(lang, category):
             "limit": "The activity reached its iteration limit. Completed work was preserved. Resume to continue from the recorded results.",
         },
         "it": {
+            "repeated_analysis": 'Il modello ha ripetuto analisi o intenzioni senza produrre la chiamata operativa necessaria. Il tentativo di recupero non è riuscito. Il lavoro verificato e la conversazione originale sono conservati.',
             "no_progress": 'Il modello continuava a ripetere le stesse letture senza avanzare. È stato tentato un recupero. Il lavoro completato e la conversazione originale sono conservati; puoi riprendere indicando il prossimo passo.',
             "no_tool_call": "Il modello non ha prodotto la chiamata operativa necessaria per completare questa richiesta dopo i tentativi di recupero. I risultati degli strumenti mostrano ciò che è stato effettivamente eseguito.",
             "empty_response": "Il modello ha restituito una risposta vuota dopo i tentativi di recupero. Controlla i risultati salvati delle operazioni prima di continuare.",
@@ -131,6 +133,7 @@ def completion_message(lang, category):
             "limit": "L’attività ha raggiunto il limite di iterazioni. Il lavoro completato è conservato. Riprendi per proseguire dai risultati registrati.",
         },
         "es": {
+            "repeated_analysis": 'El modelo repitió análisis o intenciones sin producir la llamada necesaria. La recuperación no funcionó. Se conservaron el trabajo verificado y la conversación original.',
             "no_progress": 'El modelo repitió observaciones sin cambios y sin avanzar. Se intentó una recuperación. El trabajo y la conversación se conservaron; reanuda indicando el siguiente paso.',
             "no_tool_call": "El modelo no generó una llamada de acción para esta solicitud tras los intentos de recuperación. Los resultados muestran las operaciones realizadas.",
             "empty_response": "El modelo devolvió una respuesta vacía tras los intentos de recuperación. Revisa los resultados guardados antes de continuar.",
@@ -140,6 +143,7 @@ def completion_message(lang, category):
             "limit": "La actividad alcanzó el límite de iteraciones. El trabajo completado se conservó. Reanuda desde los resultados registrados.",
         },
         "fr": {
+            "repeated_analysis": 'Le modèle a répété des analyses ou intentions sans produire l’appel nécessaire. La reprise a échoué. Le travail vérifié et la conversation originale sont conservés.',
             "no_progress": 'Le modèle répétait les mêmes observations sans avancer. Une reprise a été tentée. Le travail et la conversation sont conservés ; reprenez en précisant la prochaine étape.',
             "no_tool_call": "Le modèle n’a pas produit d’appel d’action après les tentatives de récupération. Les résultats indiquent les opérations réellement exécutées.",
             "empty_response": "Le modèle a renvoyé une réponse vide après les tentatives de récupération. Vérifiez les résultats enregistrés avant de continuer.",

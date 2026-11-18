@@ -4,7 +4,7 @@ import re
 READ = {"list_dir", "read_file", "search_files", "read_document", "view_image",
         "inspect_binary", "code_intelligence", "git_status", "read_project_context"}
 FILES = {"list_dir", "read_file", "search_files", "write_file", "edit_file", "make_dir", "move_file", "delete_file", "restore_backup"}
-CONTROL = {"ask_user", "update_plan", "checkpoint_task", "load_procedure"}
+CONTROL = {"ask_user", "update_plan", "checkpoint_task", "load_procedure", "delegate_tasks"}
 NETWORK = {"web_search", "read_url", "download_file", "browser_open", "browser_state", "browser_action"}
 ACQUIRE = {"tool_setup", "plugin_catalog", "plugin_marketplace", "plugin_tools", "plugin_call", "plugin_extension"}
 DESKTOP = {"computer_windows", "computer_inspect", "computer_action", "computer_pointer",

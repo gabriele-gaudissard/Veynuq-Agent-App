@@ -1,0 +1,5 @@
+--- a/tests/ui.test.cjs
++++ b/tests/ui.test.cjs
+@@ -179 +179 @@
+- assert.match(document.getElementById("send").textContent,/Return to active/);
++ assert.match(document.getElementById("send").textContent,/Send/);assert.equal(document.getElementById("prompt").disabled,false);

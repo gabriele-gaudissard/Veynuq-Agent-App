@@ -56,8 +56,8 @@ TOOLS = [
     schema("exec_cmd", "Execute a command. Host mode uses PowerShell with Windows user permissions; sandbox mode uses offline Linux sh on a disposable copy. Sandbox edits must be reviewed/applied separately. Needs approval except in full access.", {"command": S, "cwd": S, "timeout": I}, ["command"]),
     schema('checkpoint_task', 'Save concise progress, decisions, verification evidence and next steps for resuming a long task. Never store credentials.', {'progress': S, 'next_steps': S}, ['progress','next_steps']),
     schema('load_procedure', 'List built-in reusable workflows or load one by name: coding, desktop, repository, review, documents.', {'name': S}),
-    schema('delegate_tasks', 'Investigate up to three independent questions in parallel. Subagents can only read/search the selected project; they cannot edit, execute commands, use the desktop or ask for accounts.', {'tasks': {'type':'array','items': S}}, ['tasks']),
-    schema('delegate_coding', 'Run up to three independent coding tasks on separate filtered project copies. Workers can edit their copy and test only in offline Docker when available. Host files remain unchanged. Review/apply proposals afterwards; workers cannot browse, use accounts, control the PC or delegate.', {'tasks': {'type':'array','items': S}}, ['tasks']),
+    schema('delegate_tasks', 'Investigate independent questions in batches of up to eight, respecting the configured concurrent subagent limit. Subagents can only read/search the selected project; they cannot edit, execute commands, use the desktop or ask for accounts.', {'tasks': {'type':'array','items': S,'minItems':1,'maxItems':8}}, ['tasks']),
+    schema('delegate_coding', 'Run independent coding tasks in batches of up to eight, respecting the configured concurrent subagent limit, on separate filtered project copies. Workers can edit their copy and test only in offline Docker when available. Host files remain unchanged. Review/apply proposals afterwards; workers cannot browse, use accounts, control the PC or delegate.', {'tasks': {'type':'array','items': S,'minItems':1,'maxItems':8}}, ['tasks']),
     schema('proposal_changes', 'List coding proposals, review one diff, or apply reviewed changes with unchanged-host checks and backups. Conflicting proposals are refused rather than overwriting work.', {'action': {'type':'string','enum':['list','review','apply']}, 'proposal_id': S}, ['action']),
     schema('git_worktree', 'List worktrees or create an isolated branch inside a generated sibling folder. Does not merge or delete worktrees. Requires a clean committed repository for creation.', {'action': {'type':'string','enum':['list','create']}}, ['action']),
     schema('sandbox_changes', 'Review changes made in the offline sandbox, or apply them after checking unchanged host hashes and making backups.', {'action': {'type':'string','enum':['review','apply']}}, ['action']),
@@ -283,6 +283,8 @@ class ToolRunner:
                 raise PermissionError('Tool unavailable to isolated coding workers.')
             if self.settings.get('_read_only') and name not in READ_ONLY:
                 raise PermissionError('This activity is read-only. Commands, mutations, online tools and desktop input are disabled.')
+            if name in {"delegate_tasks", "delegate_coding"} and not self.settings.get("max_subagents", 3):
+                raise PermissionError("Subagents are disabled in Settings.")
             if name not in SPECS:
                 raise ValueError(f"Strumento sconosciuto: {name}")
             validate(args, SPECS[name], unbounded_text="content" if name == "write_file" else None)
@@ -304,29 +306,32 @@ class ToolRunner:
                 if not self.approve(preview):
                     self.store.audit(self.run_id, name, "denied", digest)
                     return {"ok": False, "error": "L'utente ha negato l'azione. Non riproporla tramite altri strumenti."}
-                if name in {'plugin_tools','plugin_call','plugin_extension'} and self.preview(name,args,paths)['plugin'] != preview['plugin']:
-                    raise PermissionError('Plugin changed during approval; action cancelled.')
-                if name == 'sandbox_changes' and args.get('action') == 'apply' and self.sandbox.changes() != preview['changes']:
-                    raise PermissionError('Sandbox changes changed during approval; application cancelled.')
-                if name == 'proposal_changes' and args.get('action') == 'apply' and self.tool_proposal_changes('review', args.get('proposal_id', '')) != preview['changes']:
-                    raise PermissionError('Coding proposal changed during approval; application cancelled.')
-                if name in WRITE and paths:
-                    after_hash = file_version(paths[0]) if check_version else (
-                        hashlib.sha256(paths[0].read_bytes()).hexdigest() if paths[0].is_file() else None)
-                    if before_hash != after_hash:
-                        raise PermissionError("File cambiato durante l'approvazione: azione annullata.")
             if self.cancel.is_set():
                 raise RuntimeError("Operazione interrotta.")
-            # Resolve again after approval. Links or paths may have changed.
-            new_paths = [self.path(args[k]) for k in ("path", "destination", "cwd") if k in args]
-            if new_paths != paths:
-                raise PermissionError("Percorso cambiato durante l'approvazione. Riprovare.")
-            display = args
-            if name == "write_file":
-                display = {key: value for key, value in args.items() if key != "content"}
-                display["characters"] = len(args["content"])
-            self.emit("tool_start", {"tool": name, "arguments": display, "reason": reason})
-            result = getattr(self, "tool_" + name)(**args)
+            from .parallel import host_action
+            with host_action(self, name):
+                # Resolve again after approval. Links or paths may have changed.
+                new_paths = [self.path(args[k]) for k in ("path", "destination", "cwd") if k in args]
+                if new_paths != paths:
+                    raise PermissionError("Percorso cambiato durante l'approvazione. Riprovare.")
+                display = args
+                if name == "write_file":
+                    display = {key: value for key, value in args.items() if key != "content"}
+                    display["characters"] = len(args["content"])
+                if needs:
+                    if name in {'plugin_tools','plugin_call','plugin_extension'} and self.preview(name,args,paths)['plugin'] != preview['plugin']:
+                        raise PermissionError('Plugin changed during approval; action cancelled.')
+                    if name == 'sandbox_changes' and args.get('action') == 'apply' and self.sandbox.changes() != preview['changes']:
+                        raise PermissionError('Sandbox changes changed during approval; application cancelled.')
+                    if name == 'proposal_changes' and args.get('action') == 'apply' and self.tool_proposal_changes('review', args.get('proposal_id', '')) != preview['changes']:
+                        raise PermissionError('Coding proposal changed during approval; application cancelled.')
+                    if name in WRITE and paths:
+                        after_hash = file_version(paths[0]) if check_version else (
+                            hashlib.sha256(paths[0].read_bytes()).hexdigest() if paths[0].is_file() else None)
+                        if before_hash != after_hash:
+                            raise PermissionError("File cambiato durante l'approvazione: azione annullata.")
+                self.emit("tool_start", {"tool": name, "arguments": display, "reason": reason})
+                result = getattr(self, "tool_" + name)(**args)
             failed = name in {"exec_cmd", "clone_repository", "git_status", "git_worktree"} and result.get("exit_code", 0) != 0 or name=='plugin_call' and bool(result.get('isError'))
             envelope = {"ok": not failed, "result": result}
             if failed:

@@ -91,8 +91,14 @@ def changes(runner, key, apply=False):
 def delegate(runner, tasks):
     from .engine import Agent
     from .storage import Store, redact
-    if not 1 <= len(tasks) <= 3 or any(not t.strip() or len(t) > 4000 for t in tasks):
-        raise ValueError('Provide 1–3 independent coding tasks, each below 4000 characters.')
+    from .parallel import worker_slot
+    limit = runner.settings.get("max_subagents", 3)
+    if type(limit) is not int or not 0 <= limit <= 8:
+        raise ValueError("Invalid subagent limit.")
+    if not limit:
+        raise PermissionError("Subagents are disabled in Settings.")
+    if not 1 <= len(tasks) <= 8 or any(not isinstance(t, str) or not t.strip() or len(t) > 4000 for t in tasks):
+        raise ValueError('Provide 1–8 independent coding tasks, each below 4000 characters.')
     if len(runner.session.get('proposals', [])) + len(tasks) > 30:
         raise ValueError('This chat already has 30 coding proposals. Review the existing work first.')
     records = []
@@ -136,5 +142,19 @@ def delegate(runner, tasks):
             'command_environment':'offline Docker only; unavailable engines fail closed'}
 
     runner.emit('notice', {'text':'Parallel coding started on separate project copies.'})
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        return list(executor.map(worker, records))
+    def guarded(task):
+        runner.emit("subagent", {"id": task["id"], "kind": "coding", "state": "queued"})
+        try:
+            with worker_slot(runner):
+                runner.emit("subagent", {"id": task["id"], "kind": "coding", "state": "running"})
+                result = worker(task)
+        except Exception as error:
+            with runner.store.lock:
+                task.update(state="cancelled" if runner.cancel.is_set() else "failed",
+                            answer=redact(str(error)[:1000], secrets))
+                runner.store.save()
+            result = {**task, "host_project_unchanged": True}
+        runner.emit("subagent", {"id": task["id"], "kind": "coding", "state": task["state"]})
+        return result
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(limit, len(tasks))) as executor:
+        return list(executor.map(guarded, records))

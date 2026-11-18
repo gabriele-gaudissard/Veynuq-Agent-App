@@ -20,9 +20,15 @@ def investigate(runner, tasks):
     from .engine import ModelClient, interrupt_response
     from .tools import TOOLS
     from .storage import redact
-    if not 1 <= len(tasks) <= 3 or any(not t.strip() or len(t) > 2000 for t in tasks):
-        raise ValueError('Provide 1–3 independent questions, each at most 2000 characters.')
-    allowed = {'read_file', 'list_dir', 'search_files'}
+    from .parallel import worker_slot
+    limit = runner.settings.get("max_subagents", 3)
+    if type(limit) is not int or not 0 <= limit <= 8:
+        raise ValueError("Invalid subagent limit.")
+    if not limit:
+        raise PermissionError("Subagents are disabled in Settings.")
+    if not 1 <= len(tasks) <= 8 or any(not isinstance(t, str) or not t.strip() or len(t) > 2000 for t in tasks):
+        raise ValueError('Provide 1–8 independent questions, each at most 2000 characters.')
+    allowed = {'read_file', 'list_dir', 'search_files'} - set(runner.settings.get('disabled_tools', []))
     secrets = [runner.store.vault.get('provider'), runner.store.vault.get('github')]
 
     def worker(task):
@@ -35,6 +41,7 @@ def investigate(runner, tasks):
                 return self.is_set()
         client = ModelClient(copy.deepcopy(runner.settings), secrets[0], Cancellation(), lambda *a: None)
         client.tools = [t for t in TOOLS if t['function']['name'] in allowed]
+        client.all_tools = list(client.tools)
         runner.child_clients.append(client)
         def stop():
             cancel.set()
@@ -72,7 +79,7 @@ def investigate(runner, tasks):
                         reads += 1
                     except Exception as error: result = {'ok': False, 'error': str(error)[:1000]}
                     messages.append({'role':'tool','tool_call_id':call['id'],'name':fn.get('name',''),
-                                     'content':redact(json.dumps(result), secrets)[:12000]})
+                                     'content':redact(json.dumps(result), secrets)})
             return {'question': task, 'state': 'limit', 'reads': reads, 'answer': 'Investigation reached its bounded turn limit.'}
         except Exception as error:
             return {'question': task, 'state': 'failed', 'reads': reads, 'error': str(error)[:1000]}
@@ -82,8 +89,20 @@ def investigate(runner, tasks):
             runner.child_clients.remove(client)
 
     runner.emit('notice', {'text': 'Parallel read-only investigations started.'})
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        return list(executor.map(worker, tasks))
+    def guarded(task):
+        key = uuid.uuid4().hex
+        runner.emit("subagent", {"id": key, "kind": "read_only", "state": "queued"})
+        try:
+            with worker_slot(runner):
+                runner.emit("subagent", {"id": key, "kind": "read_only", "state": "running"})
+                result = worker(task)
+        except Exception as error:
+            result = {"question": task, "state": "cancelled" if runner.cancel.is_set() else "failed",
+                      "reads": 0, "error": redact(str(error)[:1000], secrets)}
+        runner.emit("subagent", {"id": key, "kind": "read_only", "state": result["state"]})
+        return result
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(limit, len(tasks))) as executor:
+        return list(executor.map(guarded, tasks))
 
 
 def worktree(runner, action):

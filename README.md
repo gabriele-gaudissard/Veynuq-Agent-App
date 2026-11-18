@@ -25,6 +25,16 @@ HTTPS downloads use the Windows certificate trust store through truststore, incl
 
 Python installation now displays the official installer's real progress bar in unattended `/passive` mode. The Python download also keeps progress visible. An existing up-to-date installation is still skipped. To retry an interrupted 4.6.0 setup, download the current `Veynuq-Setup.exe` and run it again: existing chats/settings and completed verified downloads are preserved. Setup diagnostics are retained in `setup-install.log` in the application folder.
 
+## Parallel work and execution states in 4.6.6
+
+The model decides when independent work benefits from subagents. **Maximum concurrent subagents** defaults to **3**, accepts 0–8, and uses **0 to disable delegation**. This budget is shared across running chats. Read-only workers inspect the selected project; coding workers edit separate filtered copies. The parent remains responsible for reviewing proposals, integration and verification. Existing approval modes and disabled-tool settings still apply.
+
+**Maximum parallel requests** defaults to **2** and accepts 1–8. Start another chat while one is running, or type an independent request and choose **Run in parallel**. That button opens a separate chat with the same workspace/project. Normal Send in a running chat remains an immediate follow-up. Each activity has its own text stream, draft, Stop button, questions and approvals. Running chats are marked in the sidebar. Shared host effects are serialized; model requests and independent reads can overlap. A local server with one generation slot may queue model generations even while the activities run independently.
+
+The backend distinguishes ANALYZING, ACTION_REQUIRED, WAITING_FOR_TOOL_CALL, EXECUTING, VERIFYING, COMPLETED, PARTIAL and FAILED. A promise such as “now I create the corrected file” is not execution. Repeated analysis or equivalent intentions receive one controlled recovery and then a specific diagnostic. After verified work, a later promise cannot silently complete missing steps. Explicit unambiguous file targets, plans, confirmed operations, outstanding checks and the last error are retained in the evidence ledger. Original messages remain saved.
+
+A verified file is checked again before final completion. If another activity changes it, the result remains unverified instead of being silently rewritten. An unverified file operation cannot be repeated before its actual state has been inspected. Partial work is retained after an error or interruption. No model, quantization, context size or VRAM policy is changed by these features.
+
 ## Tool selection and progress in 4.6.5
 
 Requests for explanations or code displayed in chat use no tools. Resource-based analysis can select tools automatically. Authorized actions that still need execution request a required tool call when the server supports it. Each turn receives relevant definitions from the existing enabled pool; tools needed for later steps remain available after the first successful action. Disabled tools and approval gates are preserved. No model is replaced.
@@ -65,9 +75,9 @@ Tool replies have their own validation and recovery. Long file writes can use or
 
 ## See Veynuq
 
-Three screenshots of Veynuq 4.5.5 running on Windows in English with an isolated demo profile, including the local dictation button and optional-tool cleanup controls. The illustrative conversation contains no personal chat or credentials and is not a benchmark. New profiles start in English.
+Three English screenshots from isolated demo environments. The workspace and settings images show the parallel controls in 4.6.6; the optional-tool image shows the existing cleanup controls. The illustrative conversation contains no personal chat or credentials and is not a benchmark. New profiles start in English.
 
-**Workspace and conversation** — both user and agent messages are aligned left; the composer stays visible while history scrolls.
+**Workspace and conversation** — separate running chats, immediate follow-ups and the Run in parallel action. Both user and agent messages are aligned left.
 
 ![Workspace and conversation](docs/screenshots/workspace.png)
 
@@ -75,7 +85,7 @@ Three screenshots of Veynuq 4.5.5 running on Windows in English with an isolated
 
 ![Optional tools and cleanup controls](docs/screenshots/explorer.png)
 
-**Models and settings** — installed models, the ten-model download selector, custom names and information beside each model. Permissions and provider credentials are further down the same panel.
+**Settings and limits** — configure concurrent subagents and parallel requests independently. Model selection and the ten-model download catalog remain available in the same settings panel.
 
 ![Models and settings](docs/screenshots/permissions.png)
 
