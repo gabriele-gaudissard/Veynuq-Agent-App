@@ -21,6 +21,7 @@ except ImportError:
     BeautifulSoup = None
 from .network import public_request
 from .file_write import Draft, file_version, new_temp, publish, validate_write
+from .editing import EditError, edited_text, FileConflict, available_version, write_intent
 
 
 log = logging.getLogger(__name__)
@@ -48,8 +49,8 @@ TOOLS = [
     schema("list_dir", "List workspace directory entries, without following links.", {"path": S}, ["path"]),
     schema("read_file", "Read UTF-8 text or BOM-marked UTF-16 text with line numbers; use pagination. Executables and other binary files are not text. Use read_document for PDF/DOCX and view_image for images.", {"path": S, "start_line": I, "end_line": I}, ["path"]),
     schema("search_files", "Search literal text recursively in workspace files; excludes secrets, dependencies and links.", {"query": S, "path": S}, ["query"]),
-    schema("write_file", "Create a UTF-8 file atomically with path and content. Omit part for a complete file. To replace an existing file, inspect it and set overwrite=true; its original is backed up. For long files send one small part per response: part=1 then increase by one. Numbered parts default to unpublished. final=false with no part also starts at part 1; only explicit final=true publishes a staged write. Each part is literal text. Use newline=lf or crlf when a trailing line break is needed; the tool adds it only when the content does not end in a line break. Only final=true publishes the file.", {"path": S, "content": {"type": "string"}, "overwrite": B, "part": {"type": "integer", "minimum": 1}, "final": B, "newline": {"type": "string", "enum": ["lf", "crlf"]}}, ["path", "content"]),
-    schema("edit_file", "Replace one exact occurrence, with backup. Fails if old text is missing or ambiguous.", {"path": S, "old": S, "new": S}, ["path", "old", "new"]),
+    schema("write_file", "Create a UTF-8 file atomically with path and content. Omit part for a complete file. Existing destinations return DESTINATION_EXISTS. Use overwrite=true only for a user-authorized replacement; ambiguous intent requires confirmation. Requested new versions use an available alternative name. Originals are backed up before replacement. final=true never authorizes overwrite. For long files send one small part per response: part=1 then increase by one. Numbered parts default to unpublished. final=false with no part also starts at part 1; only explicit final=true publishes a staged write. Each part is literal text. Use newline=lf or crlf when a trailing line break is needed; the tool adds it only when the content does not end in a line break. Only final=true publishes the file.", {"path": S, "content": {"type": "string"}, "overwrite": B, "part": {"type": "integer", "minimum": 1}, "final": B, "newline": {"type": "string", "enum": ["lf", "crlf"]}}, ["path", "content"]),
+    schema("edit_file", "Replace exactly one literal occurrence, with backup. For ambiguity, add surrounding text or use start_line/end_line bound to expected_sha256 from the current diagnostic. Never replaces all occurrences.", {"path": S, "old": S, "new": S, "start_line": I, "end_line": I, "expected_sha256": S}, ["path", "old", "new"]),
     schema("make_dir", "Create a workspace directory.", {"path": S}, ["path"]),
     schema("move_file", "Move/rename one file, no overwrite. Both paths need permission.", {"path": S, "destination": S}, ["path", "destination"]),
     schema("delete_file", "Delete one regular file after making a recoverable backup. No recursive deletion.", {"path": S}, ["path"]),
@@ -266,12 +267,31 @@ class ToolRunner:
                 if len(before) > 8000 or len(args["content"]) > 8000:
                     result["diff"] += "\n[Preview shortened.]"
         if name == "edit_file" and paths:
-            if paths[0].exists() and paths[0].stat().st_size > 500000:
-                raise ValueError("File troppo grande per l'anteprima (500 KB).")
-            before = paths[0].read_text(encoding="utf-8") if paths[0].exists() else ""
-            after = before.replace(args["old"], args["new"], 1)
+            _, _, before, after = self._edit_plan(**args)
             result["diff"] = "".join(difflib.unified_diff(before.splitlines(True), after.splitlines(True), fromfile=str(paths[0]), tofile=str(paths[0])))[:20000]
         return result
+
+    def _prepare_write_destination(self, args):
+        args = dict(args)
+        target = self.path(args["path"])
+        redirects = getattr(self, "_write_redirects", {})
+        previous = redirects.get(str(target))
+        if previous in self.file_drafts:
+            return {**args, "path":str(previous), "overwrite":False}, {
+                "requested_path":str(target),"conflict_resolution":"new_version"}, False
+        if not target.exists():
+            return args, {}, False
+        intent = write_intent(self.session, target)
+        if intent == "new_version":
+            destination = self.path(str(available_version(target)))
+            self._write_redirects = {**redirects, str(target):destination}
+            return {**args, "path":str(destination), "overwrite":False}, {
+                "requested_path":str(target),"conflict_resolution":"new_version"}, False
+        if args.get("overwrite") is True and intent == "forbidden":
+            raise FileConflict(target, intent=intent)
+        confirm = (args.get("overwrite") is True and intent == "ambiguous"
+                   and not self.settings.get("_worker_tools"))
+        return args, {}, confirm
 
     def execute(self, name, args):
         self._python_candidate=None
@@ -288,12 +308,16 @@ class ToolRunner:
             if name not in SPECS:
                 raise ValueError(f"Strumento sconosciuto: {name}")
             validate(args, SPECS[name], unbounded_text="content" if name == "write_file" else None)
+            write_resolution, confirm_existing = {}, False
             if name == "write_file":
                 validate_write(args)
+                args, write_resolution, confirm_existing = self._prepare_write_destination(args)
             paths = [self.path(args[k]) for k in ("path", "destination", "cwd") if k in args]
             if self.settings.get('_read_only') and any(not p.is_relative_to(self.workspace) for p in paths):
                 raise PermissionError('Read-only activities cannot access files outside the selected project.')
             needs, reason = self.decision(name, args, paths)
+            if confirm_existing:
+                needs, reason = True, "Conferma la sostituzione del file esistente; l'intenzione di sovrascriverlo è ambigua."
             digest = hashlib.sha256(json.dumps([name, args], sort_keys=True).encode()).hexdigest()
             if self.cancel.is_set():
                 raise RuntimeError("Operazione interrotta.")
@@ -332,6 +356,8 @@ class ToolRunner:
                             raise PermissionError("File cambiato durante l'approvazione: azione annullata.")
                 self.emit("tool_start", {"tool": name, "arguments": display, "reason": reason})
                 result = getattr(self, "tool_" + name)(**args)
+                if name == "write_file" and write_resolution:
+                    result.update(write_resolution)
             failed = name in {"exec_cmd", "clone_repository", "git_status", "git_worktree"} and result.get("exit_code", 0) != 0 or name=='plugin_call' and bool(result.get('isError'))
             envelope = {"ok": not failed, "result": result}
             if failed:
@@ -353,6 +379,8 @@ class ToolRunner:
         except Exception as e:
             self.store.audit(self.run_id, name, "failed", digest)
             result = {"ok": False, "error": str(e)[:2000]}
+            if isinstance(e, (EditError, FileConflict)):
+                result.update(e.details)
             self.emit("tool_result", {"tool": name, "result": result})
             return result
 
@@ -730,7 +758,7 @@ class ToolRunner:
                 overwrite = bool(self.settings.get("_worker_tools"))
             expected = file_version(target)
             if expected is not None and not overwrite:
-                raise FileExistsError("Destination exists. Read it and use edit_file or explicitly set overwrite=true to replace it.")
+                raise FileConflict(target, expected[-1].hex(), write_intent(self.session, target))
         if part is None:
             if draft:
                 raise ValueError("A staged write exists for this file. Continue using its next part.")
@@ -772,7 +800,7 @@ class ToolRunner:
         return {"path": str(target), "bytes": size, "backup": backup, "published": True, "modified": True,
                 "sha256": content_hash}
 
-    def tool_edit_file(self, path, old, new):
+    def _edit_plan(self, path, old, new, start_line=None, end_line=None, expected_sha256=None):
         target = self.path(path)
         expected = file_version(target)
         if expected is None:
@@ -781,12 +809,12 @@ class ToolRunner:
             raise ValueError("Usa un file sotto 500 KB per edit_file.")
         with target.open(encoding="utf-8", newline="") as stream:
             before = stream.read()
-        # Existing callers often supply LF from read_file even on CRLF files.
-        if old and before.count(old) != 1 and "\r\n" in before and "\r" not in old + new:
-            old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
-        if not old or before.count(old) != 1:
-            raise ValueError("Il testo da sostituire deve comparire esattamente una volta.")
-        return self._write_complete(target, before.replace(old, new, 1).encode("utf-8"), expected)
+        after = edited_text(before, old, new, expected[-1].hex(), start_line, end_line, expected_sha256)
+        return target, expected, before, after
+
+    def tool_edit_file(self, path, old, new, start_line=None, end_line=None, expected_sha256=None):
+        target, expected, before, after = self._edit_plan(path, old, new, start_line, end_line, expected_sha256)
+        return self._write_complete(target, after.encode("utf-8"), expected)
 
     def tool_make_dir(self, path):
         target = self.path(path)

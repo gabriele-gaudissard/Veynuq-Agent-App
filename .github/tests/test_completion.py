@@ -119,7 +119,7 @@ class CompletionTests(unittest.TestCase):
     def test_corrected_operation_recovers_failure(self):
         (self.project / "proof.txt").write_text("old")
         self.run_agent([tool("write_file", path="proof.txt", content="new"),
-                        tool("write_file", path="proof.txt", content="new", overwrite=True), DONE])
+                        tool("write_file", path="proof.txt", content="new", overwrite=True), DONE], "Overwrite proof.txt.")
         self.assertEqual(self.agent.state, "completed")
         self.assertTrue(self.session["task"]["operations"][0]["recovered"])
         self.assertEqual((self.project / "proof.txt").read_text(), "new")

@@ -25,6 +25,16 @@ HTTPS downloads use the Windows certificate trust store through truststore, incl
 
 Python installation now displays the official installer's real progress bar in unattended `/passive` mode. The Python download also keeps progress visible. An existing up-to-date installation is still skipped. To retry an interrupted 4.6.0 setup, download the current `Veynuq-Setup.exe` and run it again: existing chats/settings and completed verified downloads are preserved. Setup diagnostics are retained in `setup-install.log` in the application folder.
 
+## File conflicts and bounded recovery in 4.6.7
+
+Text edits distinguish **TEXT_NOT_FOUND** from **AMBIGUOUS_MATCH**, with match counts, candidate line ranges and the current file hash. An ambiguous replacement requires unique surrounding text or an explicit line interval tied to that hash. Veynuq never replaces the first of several matches automatically. The original three-argument edit interface remains supported.
+
+Authorized text reads are cached for the current activity and reused when the file content is unchanged. Different uncached ranges and changed files can still be read normally. An identical failed patch is not dispatched again; at most two different recovery attempts follow the initial failure. Checkpoints without new concrete evidence are rejected even when their wording changes, with a bounded stop instead of an endless checkpoint loop.
+
+An existing write destination returns **DESTINATION_EXISTS**. Explicitly authorized replacement can use `overwrite=true`, preserving the original in a backup. A requested new version uses an available `_v2`, `_v3`, … filename and verifies that actual destination. Ambiguous replacement uses the normal confirmation flow, including in full access. `final=true` publishes a staged file; it never grants replacement permission. Repeated failed writes and unchanged rereads do not restart the task indefinitely.
+
+Writes retain staging, ordered parts, atomic publication where supported, backup and external-change checks. Tool failures remain failures; saved history and earlier verified work are preserved. No model, server, context or token settings are changed by this release.
+
 ## Parallel work and execution states in 4.6.6
 
 The model decides when independent work benefits from subagents. **Maximum concurrent subagents** defaults to **3**, accepts 0–8, and uses **0 to disable delegation**. This budget is shared across running chats. Read-only workers inspect the selected project; coding workers edit separate filtered copies. The parent remains responsible for reviewing proposals, integration and verification. Existing approval modes and disabled-tool settings still apply.

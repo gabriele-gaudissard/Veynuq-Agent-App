@@ -281,7 +281,7 @@ class AgentProgressTests(unittest.TestCase):
             {"id":"read","function":{"name":"read_file","arguments":{"path":"input.txt"}}}]}
         write={"role":"assistant","content":"","tool_calls":[
             {"id":"write","function":{"name":"write_file","arguments":{"path":"input.txt","content":"fixed","overwrite":True}}}]}
-        self.run_agent([copy.deepcopy(read) for _ in range(5)]+[write,{"role":"assistant","content":"Done."}])
+        self.run_agent([copy.deepcopy(read) for _ in range(5)]+[write,{"role":"assistant","content":"Done."}], "Overwrite input.txt.")
         self.assertEqual(self.api._agent.state,"completed")
         self.assertEqual((self.project/"input.txt").read_text(),"fixed")
 

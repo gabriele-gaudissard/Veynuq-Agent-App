@@ -113,6 +113,10 @@ def generation_message(lang, reason, partial=False):
 def completion_message(lang, category):
     messages = {
         "en": {
+            'edit_no_progress': 'The edit failed and the model kept reusing unchanged input or the same failed patch. Stopped without repeating the modification. Review TEXT_NOT_FOUND or AMBIGUOUS_MATCH in the tool result.',
+            'edit_recovery_exhausted': 'The edit still failed after two different recovery attempts. No successful modification was reported; the original and any verified earlier work were preserved.',
+            'checkpoint_no_progress': 'The model repeated checkpoints without new evidence. Stopped this loop; saved checkpoints do not prove that the requested work was performed.',
+            'write_conflict_no_progress': 'The destination already exists. Recovery did not produce an available filename or an authorized replacement. The existing file was preserved; the failed write was not marked complete.',
             "repeated_analysis": 'The model repeated analysis or promises without producing the required action call. Recovery did not resolve it. Verified work and the original conversation were preserved.',
             "no_progress": 'The model kept repeating unchanged observations without making progress. Recovery was attempted once. Completed work and the original conversation were preserved; resume with a more specific next step.',
             "no_tool_call": "The model did not produce an action call needed to finish this request after the recovery attempts. The tool results show what was actually performed.",
@@ -123,6 +127,10 @@ def completion_message(lang, category):
             "limit": "The activity reached its iteration limit. Completed work was preserved. Resume to continue from the recorded results.",
         },
         "it": {
+            'edit_no_progress': 'La modifica è fallita e il modello ripeteva letture invariate o la stessa sostituzione fallita. Ho fermato il ciclo senza ripetere la modifica. Controlla TEXT_NOT_FOUND o AMBIGUOUS_MATCH nel risultato.',
+            'edit_recovery_exhausted': 'La modifica è fallita anche dopo due tentativi di recupero diversi. Non è stata dichiarata completata; l’originale e gli eventuali risultati precedenti verificati sono conservati.',
+            'checkpoint_no_progress': 'Il modello ripeteva checkpoint senza nuove evidenze. Ho fermato il ciclo: salvare un checkpoint non dimostra che il lavoro richiesto sia stato eseguito.',
+            'write_conflict_no_progress': 'Il file di destinazione esiste già. Il recupero non ha prodotto un nome disponibile o una sostituzione autorizzata. Il file esistente è conservato e la scrittura fallita non è dichiarata completata.',
             "repeated_analysis": 'Il modello ha ripetuto analisi o intenzioni senza produrre la chiamata operativa necessaria. Il tentativo di recupero non è riuscito. Il lavoro verificato e la conversazione originale sono conservati.',
             "no_progress": 'Il modello continuava a ripetere le stesse letture senza avanzare. È stato tentato un recupero. Il lavoro completato e la conversazione originale sono conservati; puoi riprendere indicando il prossimo passo.',
             "no_tool_call": "Il modello non ha prodotto la chiamata operativa necessaria per completare questa richiesta dopo i tentativi di recupero. I risultati degli strumenti mostrano ciò che è stato effettivamente eseguito.",
@@ -133,6 +141,10 @@ def completion_message(lang, category):
             "limit": "L’attività ha raggiunto il limite di iterazioni. Il lavoro completato è conservato. Riprendi per proseguire dai risultati registrati.",
         },
         "es": {
+            'edit_no_progress': 'La modificación falló y el modelo repitió lecturas sin cambios o el mismo parche fallido. Se detuvo el ciclo. Revisa TEXT_NOT_FOUND o AMBIGUOUS_MATCH en el resultado.',
+            'edit_recovery_exhausted': 'La modificación falló tras dos intentos de recuperación diferentes. Se conservaron el original y el trabajo verificado; no se declaró completada.',
+            'checkpoint_no_progress': 'El modelo repitió puntos de control sin nuevas pruebas. Se detuvo el ciclo; guardarlos no demuestra que el trabajo se haya realizado.',
+            'write_conflict_no_progress': 'El destino ya existe. La recuperación no produjo un nombre disponible ni una sustitución autorizada. Se conservó el archivo existente; la escritura fallida no se declaró completada.',
             "repeated_analysis": 'El modelo repitió análisis o intenciones sin producir la llamada necesaria. La recuperación no funcionó. Se conservaron el trabajo verificado y la conversación original.',
             "no_progress": 'El modelo repitió observaciones sin cambios y sin avanzar. Se intentó una recuperación. El trabajo y la conversación se conservaron; reanuda indicando el siguiente paso.',
             "no_tool_call": "El modelo no generó una llamada de acción para esta solicitud tras los intentos de recuperación. Los resultados muestran las operaciones realizadas.",
@@ -143,6 +155,10 @@ def completion_message(lang, category):
             "limit": "La actividad alcanzó el límite de iteraciones. El trabajo completado se conservó. Reanuda desde los resultados registrados.",
         },
         "fr": {
+            'edit_no_progress': 'La modification a échoué et le modèle répétait les mêmes lectures ou le même remplacement. La boucle a été arrêtée. Consultez TEXT_NOT_FOUND ou AMBIGUOUS_MATCH dans le résultat.',
+            'edit_recovery_exhausted': 'La modification a échoué après deux tentatives de reprise différentes. L’original et le travail vérifié sont conservés ; elle n’a pas été déclarée terminée.',
+            'checkpoint_no_progress': 'Le modèle répétait des points de reprise sans nouvelle preuve. La boucle a été arrêtée ; leur sauvegarde ne prouve pas que le travail a été effectué.',
+            'write_conflict_no_progress': 'La destination existe déjà. La reprise n’a produit ni nom disponible ni remplacement autorisé. Le fichier existant est conservé ; l’écriture échouée n’a pas été déclarée terminée.',
             "repeated_analysis": 'Le modèle a répété des analyses ou intentions sans produire l’appel nécessaire. La reprise a échoué. Le travail vérifié et la conversation originale sont conservés.',
             "no_progress": 'Le modèle répétait les mêmes observations sans avancer. Une reprise a été tentée. Le travail et la conversation sont conservés ; reprenez en précisant la prochaine étape.',
             "no_tool_call": "Le modèle n’a pas produit d’appel d’action après les tentatives de récupération. Les résultats indiquent les opérations réellement exécutées.",

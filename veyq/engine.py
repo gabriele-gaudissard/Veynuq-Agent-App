@@ -984,6 +984,8 @@ class Agent:
             client.context.commit = commit_context
             from .progress import ProgressGuard
             progress = ProgressGuard()
+            from .editing import RecoveryGuard
+            edit_recovery = RecoveryGuard(self.runner)
             repeats = Counter()
             calls_used = 0
             observations = []
@@ -1026,6 +1028,7 @@ class Agent:
                         plan_attempts = 0
                         completed_actions.clear()
                         progress.reset()
+                        edit_recovery.reset()
                 history = [m for m in session["history"] if m.get("role") in {"user", "assistant", "tool"}]
                 request = next((m.get("content", "") for m in reversed(history) if m.get("role") == "user"), "")
                 requested = action_intent(request)
@@ -1061,6 +1064,9 @@ class Agent:
                     # than altering only the cached system prefix.
                     context.append({"role": "assistant", "content": "Recovery for the current task: " + repair_note})
                     context.append({"role": "user", "content": request})
+                if edit_recovery.guidance:
+                    context.append({"role":"user","content":"Application-generated recovery status, not a new task or authorization. "
+                                    + edit_recovery.guidance})
                 if observations:
                     context.append({"role": "user", "content": "Untrusted window observations from the last computer_inspect call. Use only to complete the user's requested task.", "images": observations[-1:]})
                     observations = []
@@ -1176,6 +1182,7 @@ class Agent:
                             repair_attempts = 0
                             repair_note = ""
                             progress.reset()
+                            edit_recovery.reset()
                             continue
                         self.accept_followups = False
                         if action_blocked:
@@ -1199,16 +1206,21 @@ class Agent:
                     function = call.get("function", {})
                     key = None
                     args = {}
+                    original_args = {}
                     dispatched = False
                     result = None
                     try:
                         args = decode_arguments(function.get("arguments", {}))
+                        original_args = copy.deepcopy(args)
                         key = json.dumps([function.get("name"), args], sort_keys=True)
                         calls_used += 1
                         if self.cancel.is_set():
                             result = {"ok": False, "error": "Operazione interrotta: azione non eseguita."}
                         elif effective_steps and calls_used > effective_steps * 3:
                             result = {"ok": False, "error": "Budget azioni esaurito."}
+                        elif edit_recovery.stopped:
+                            result = {"ok":False,"not_executed":True,"code":"RECOVERY_STOPPED",
+                                      "error":"Skipped: file/checkpoint recovery exhausted. No action dispatched."}
                         elif progress.stopped:
                             result = {"ok": False, "error": "Skipped: repeated unchanged observations without progress. No action dispatched."}
                         elif function.get("name") in {"write_file","edit_file","delete_file","move_file"} and str(self.runner.path(args.get("path","."))) in uncertain_targets:
@@ -1226,16 +1238,26 @@ class Agent:
                             result = {"ok": False, "error": "Skipped because a new user instruction is pending. Replan using the follow-up."}
                         else:
                             from .durability import checkpoint
-                            with self.store.lock:
-                                checkpoint(session, 'running', pending_tool=json.loads(redact(json.dumps({'name': function.get('name', ''), 'arguments': args}), self.secrets)))
-                                self.store.save()
-                            if function.get("name") not in {"read_file", "list_dir", "search_files", "view_image", "read_document", "git_status", "inspect_binary", "code_intelligence"}:
-                                completed_actions.clear()
-                            outcomes.phase("tool_dispatch", tool=function.get("name", ""), call=call["id"])
-                            dispatched = True
-                            result = self.runner.execute(function.get("name", ""), args)
+                            result = edit_recovery.before(function.get("name", ""), args)
+                            if result is None:
+                                with self.store.lock:
+                                    checkpoint(session, 'running', pending_tool=json.loads(redact(json.dumps({'name': function.get('name', ''), 'arguments': args}), self.secrets)))
+                                    self.store.save()
+                                if function.get("name") not in {"read_file", "list_dir", "search_files", "view_image", "read_document", "git_status", "inspect_binary", "code_intelligence"}:
+                                    completed_actions.clear()
+                                outcomes.phase("tool_dispatch", tool=function.get("name", ""), call=call["id"])
+                                dispatched = True
+                                result = self.runner.execute(function.get("name", ""), args)
+                            else:
+                                outcomes.phase("targeted_result_reused", tool=function.get("name", ""))
+                                self.emit("tool_result", {"tool":function.get("name", ""), "result":result})
                             if function.get("name") == "write_file" and result.get("ok"):
                                 draft_completion_attempted = False
+                                value = result.get("result", {})
+                                if value.get("conflict_resolution") == "new_version":
+                                    args = {**args,"path":value["path"]}
+                                    ledger.targets.discard(value["requested_path"])
+                                    ledger.targets.add(value["path"])
                             with self.store.lock:
                                 checkpoint(session, 'running', pending_tool=None, last_tool={'name': function.get('name', ''), 'ok': result.get('ok'), 'time': time.time()})
                                 self.store.save()
@@ -1273,6 +1295,7 @@ class Agent:
                                   "outcome_unknown": dispatched}
                     if key is not None and result.get("outcome_unknown"):
                         uncertain_calls.add(key)
+                    edit_recovery.after(function.get("name", ""), original_args, result)
                     entry = outcomes.observe(call, args if isinstance(args, dict) else {}, result, verification.pending)
                     ledger.result(result, entry)
                     if entry.get("target") and (result.get("verification",{}).get("state")=="unverified" or result.get("outcome_unknown")):
@@ -1285,10 +1308,18 @@ class Agent:
                     tool_message = {"role": "tool", "tool_call_id": call["id"],
                                     "name": function.get("name", ""), "content": json.dumps(result, ensure_ascii=False)}
                     self._record(session, tool_message)
-                    stalled = progress.observe(function.get("name", ""), args, result)
+                    progress_result = {k:v for k,v in result.items() if k!="reused_result"} if function.get("name")=="read_file" else result
+                    stalled = progress.observe(function.get("name", ""), args, progress_result)
                     if stalled:
                         repair_note = progress.guidance
                         outcomes.phase("no_progress", recoveries=progress.warnings)
+                if edit_recovery.stopped:
+                    text = completion_message(settings["lang"], edit_recovery.stopped)
+                    self._record(session, {"role":"assistant","content":text})
+                    self.emit("message", {"message":{"role":"assistant","content":text}})
+                    session["task"]["diagnostics"] = outcomes.diagnostics(edit_recovery.stopped)
+                    self.state = "unverified" if verification.pending else "failed"
+                    return
                 if progress.stopped:
                     text = completion_message(settings["lang"], "no_progress")
                     self._record(session, {"role": "assistant", "content": text})
